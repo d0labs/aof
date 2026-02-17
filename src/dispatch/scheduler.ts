@@ -13,7 +13,7 @@ import { checkStaleHeartbeats, markRunArtifactExpired, readRunResult } from "../
 import { resolveCompletionTransitions } from "../protocol/completion-utils.js";
 import { SLAChecker } from "./sla-checker.js";
 import { join, relative } from "node:path";
-import { readFile } from "node:fs/promises";
+import { readFile, access } from "node:fs/promises";
 import { parse as parseYaml } from "yaml";
 import writeFileAtomic from "write-file-atomic";
 import type { DispatchExecutor, TaskContext } from "./executor.js";
@@ -24,6 +24,8 @@ import { ProjectManifest } from "../schemas/project.js";
 import type { GateOutcome, GateTransition } from "../schemas/gate.js";
 import { parseDuration } from "./duration-parser.js";
 import { buildGateContext } from "./gate-context-builder.js";
+import { evaluateMurmurTriggers } from "./murmur-integration.js";
+import { loadOrgChart } from "../org/loader.js";
 
 export interface SchedulerConfig {
   /** Root data directory. */
@@ -1421,6 +1423,70 @@ export async function poll(
     if (actionsExecuted === 0 && stats.ready > 0 && actionsFailed > 0) {
       console.error(`[AOF] ALERT: No successful dispatches this poll (${stats.ready} ready, ${actionsFailed} failed)`);
       console.error(`[AOF] ALERT: Check spawnAgent API availability and agent registry`);
+    }
+  }
+
+  // 9. AOF-yea: Murmur orchestration review evaluation
+  // Runs after normal dispatch cycle to evaluate triggers and create review tasks
+  try {
+    // Load org chart to get team configurations
+    const orgChartPath = join(config.dataDir, "org.yaml");
+    let orgChartExists = true;
+    try {
+      await access(orgChartPath);
+    } catch {
+      orgChartExists = false;
+    }
+
+    if (orgChartExists) {
+      const orgChartResult = await loadOrgChart(orgChartPath);
+      
+      if (orgChartResult.success && orgChartResult.chart) {
+        const teams = orgChartResult.chart.teams ?? [];
+        
+        // Evaluate murmur triggers for teams with orchestrator config
+        const murmurResult = await evaluateMurmurTriggers(teams, {
+          store,
+          logger,
+          executor: config.executor,
+          dryRun: config.dryRun,
+          defaultLeaseTtlMs: config.defaultLeaseTtlMs,
+          spawnTimeoutMs: config.spawnTimeoutMs ?? 30_000,
+          maxConcurrentDispatches: effectiveConcurrencyLimit ?? config.maxConcurrentDispatches ?? 3,
+          currentInProgress: stats.inProgress,
+        });
+        
+        // Log murmur evaluation results
+        if (murmurResult.teamsEvaluated > 0) {
+          try {
+            await logger.log("murmur.poll", "scheduler", {
+              taskId: null,
+              payload: {
+                teamsEvaluated: murmurResult.teamsEvaluated,
+                reviewsTriggered: murmurResult.reviewsTriggered,
+                reviewsDispatched: murmurResult.reviewsDispatched,
+                reviewsFailed: murmurResult.reviewsFailed,
+                reviewsSkipped: murmurResult.reviewsSkipped,
+              },
+            });
+          } catch {
+            // Logging errors should not crash the scheduler
+          }
+        }
+      }
+    }
+  } catch (error) {
+    // Murmur evaluation errors should not crash the scheduler
+    console.error(`[AOF] Murmur evaluation failed: ${(error as Error).message}`);
+    try {
+      await logger.log("murmur.evaluation.failed", "scheduler", {
+        taskId: null,
+        payload: {
+          error: (error as Error).message,
+        },
+      });
+    } catch {
+      // Logging errors should not crash the scheduler
     }
   }
 

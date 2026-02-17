@@ -7,6 +7,7 @@ import type { AOFMetrics } from "../metrics/exporter.js";
 import type { NotificationService } from "../events/notifier.js";
 import { parseProtocolMessage, ProtocolRouter } from "../protocol/router.js";
 import { discoverProjects, type ProjectRecord } from "../projects/index.js";
+import { createMurmurHook } from "../dispatch/murmur-hooks.js";
 
 export interface AOFServiceConfig {
   dataDir: string;
@@ -65,7 +66,7 @@ export class AOFService {
     this.vaultRoot = config.vaultRoot;
     
     const storeWithHooks = deps.store ?? new FilesystemTaskStore(config.dataDir, {
-      hooks: this.createStoreHooks(deps.notifier),
+      hooks: this.createStoreHooks(deps.notifier, config.dataDir),
     });
     
     this.store = storeWithHooks;
@@ -188,7 +189,7 @@ export class AOFService {
 
       const store = new FilesystemTaskStore(project.path, {
         projectId: project.id,
-        hooks: this.createStoreHooks(this.notifier),
+        hooks: this.createStoreHooks(this.notifier, project.path),
         logger: this.logger,
       });
       
@@ -273,9 +274,21 @@ export class AOFService {
     return aggregated;
   }
 
-  private createStoreHooks(notifier?: NotificationService): import("../store/task-store.js").TaskStoreHooks {
+  private createStoreHooks(
+    notifier?: NotificationService,
+    projectRoot?: string
+  ): import("../store/task-store.js").TaskStoreHooks {
+    // Create murmur hook for orchestration review tracking
+    const murmurHook = projectRoot ? createMurmurHook(projectRoot) : undefined;
+    
     return {
       afterTransition: async (task, previousStatus) => {
+        // Murmur state tracking (completions, failures, review end)
+        if (murmurHook) {
+          await murmurHook(task, previousStatus);
+        }
+        
+        // Notification service hook
         if (!notifier) return;
         
         await notifier.notify({
