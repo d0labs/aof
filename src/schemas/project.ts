@@ -6,6 +6,7 @@
  */
 
 import { z } from "zod";
+import { WorkflowConfig } from "./workflow.js";
 
 /** Valid project ID: [a-z0-9][a-z0-9-]{1,63} or special _inbox */
 export const PROJECT_ID_REGEX = /^(_inbox|[a-z0-9][a-z0-9-]{1,63})$/;
@@ -79,6 +80,26 @@ export const ProjectLinks = z.object({
 });
 export type ProjectLinks = z.infer<typeof ProjectLinks>;
 
+/** SLA configuration for project tasks. */
+export const ProjectSLA = z.object({
+  /** Default max in-progress duration for normal tasks (ms). */
+  defaultMaxInProgressMs: z.number().int().positive().optional(),
+  /** Default max in-progress duration for research tasks (ms). */
+  researchMaxInProgressMs: z.number().int().positive().optional(),
+  /** Violation policy (Phase 1: only 'alert' is supported). */
+  onViolation: z.enum(["alert", "block", "deadletter"]).default("alert"),
+  /** Alerting configuration. */
+  alerting: z.object({
+    /** Alert channel (slack, discord, email). */
+    channel: z.string().optional(),
+    /** Webhook URL for alerts. */
+    webhook: z.string().optional(),
+    /** Rate limit for alerts (minutes between alerts per task). */
+    rateLimitMinutes: z.number().int().positive().default(15),
+  }).optional(),
+});
+export type ProjectSLA = z.infer<typeof ProjectSLA>;
+
 /** Project manifest (project.yaml). */
 export const ProjectManifest = z.object({
   /** Project ID: must match directory name and follow [a-z0-9][a-z0-9-]{1,63} or be _inbox. */
@@ -103,5 +124,9 @@ export const ProjectManifest = z.object({
   memory: ProjectMemory.default({}),
   /** External links. */
   links: ProjectLinks.default({}),
+  /** SLA configuration (time limits and violation handling). */
+  sla: ProjectSLA.optional(),
+  /** Workflow configuration (multi-stage task progression). */
+  workflow: WorkflowConfig.optional(),
 });
 export type ProjectManifest = z.infer<typeof ProjectManifest>;

@@ -7,14 +7,22 @@
 
 import { TaskStore, serializeTask } from "../store/task-store.js";
 import { EventLogger } from "../events/logger.js";
-import { acquireLease } from "../store/lease.js";
-import { expireLeases } from "../store/lease.js";
+import { acquireLease, expireLeases, renewLease, releaseLease } from "../store/lease.js";
 import { checkStaleHeartbeats, markRunArtifactExpired, readRunResult } from "../recovery/run-artifacts.js";
 import { resolveCompletionTransitions } from "../protocol/completion-utils.js";
+import { SLAChecker } from "./sla-checker.js";
 import { join, relative } from "node:path";
+import { readFile } from "node:fs/promises";
+import { parse as parseYaml } from "yaml";
 import writeFileAtomic from "write-file-atomic";
 import type { DispatchExecutor, TaskContext } from "./executor.js";
 import type { Task, TaskStatus } from "../schemas/task.js";
+import { evaluateGateTransition, type GateEvaluationInput, type GateEvaluationResult } from "./gate-evaluator.js";
+import { validateWorkflow, type WorkflowConfig } from "../schemas/workflow.js";
+import { ProjectManifest } from "../schemas/project.js";
+import type { GateOutcome, GateTransition } from "../schemas/gate.js";
+import { parseDuration } from "./duration-parser.js";
+import { buildGateContext } from "./gate-context-builder.js";
 
 export interface SchedulerConfig {
   /** Root data directory. */
@@ -29,15 +37,22 @@ export interface SchedulerConfig {
   executor?: DispatchExecutor;
   /** Spawn timeout in ms (default 30s). */
   spawnTimeoutMs?: number;
+  /** SLA checker instance (optional — created if not provided). */
+  slaChecker?: SLAChecker;
+  /** Maximum concurrent in-progress tasks across all agents (default: 3). */
+  maxConcurrentDispatches?: number;
 }
 
 export interface SchedulerAction {
-  type: "expire_lease" | "assign" | "requeue" | "block" | "deadletter" | "alert" | "stale_heartbeat";
+  type: "expire_lease" | "assign" | "requeue" | "block" | "deadletter" | "alert" | "stale_heartbeat" | "sla_violation" | "promote";
   taskId: string;
   taskTitle: string;
   agent?: string;
   reason: string;
   fromStatus?: TaskStatus;
+  toStatus?: TaskStatus;  // For promote actions
+  duration?: number;  // For SLA violations: actual duration
+  limit?: number;     // For SLA violations: SLA limit
 }
 
 export interface PollResult {
@@ -62,6 +77,339 @@ function isLeaseActive(lease?: Task["frontmatter"]["lease"]): boolean {
   return expiresAt > Date.now();
 }
 
+const LEASE_RENEWAL_MAX = 20;
+const leaseRenewalTimers = new Map<string, NodeJS.Timeout>();
+
+/**
+ * Effective concurrency limit — auto-detected from OpenClaw platform limit.
+ * Starts null, set to min(platformLimit, config.maxConcurrentDispatches) when detected.
+ */
+let effectiveConcurrencyLimit: number | null = null;
+
+function leaseRenewalKey(store: TaskStore, taskId: string): string {
+  return `${store.projectId}:${taskId}`;
+}
+
+function stopLeaseRenewal(store: TaskStore, taskId: string): void {
+  const key = leaseRenewalKey(store, taskId);
+  const timer = leaseRenewalTimers.get(key);
+  if (!timer) return;
+  clearInterval(timer);
+  leaseRenewalTimers.delete(key);
+}
+
+function startLeaseRenewal(store: TaskStore, taskId: string, agentId: string, leaseTtlMs: number): void {
+  const key = leaseRenewalKey(store, taskId);
+  if (leaseRenewalTimers.has(key)) return;
+
+  const intervalMs = Math.max(1, Math.floor(leaseTtlMs / 2));
+  const timer = setInterval(() => {
+    void renewLease(store, taskId, agentId, {
+      ttlMs: leaseTtlMs,
+      maxRenewals: LEASE_RENEWAL_MAX,
+    }).catch(() => {
+      stopLeaseRenewal(store, taskId);
+    });
+  }, intervalMs);
+
+  timer.unref?.();
+  leaseRenewalTimers.set(key, timer);
+}
+
+function cleanupLeaseRenewals(store: TaskStore, tasks: Task[]): void {
+  const active = new Set<string>();
+  for (const task of tasks) {
+    if (task.frontmatter.status !== "in-progress") continue;
+    const lease = task.frontmatter.lease;
+    if (!lease || !lease.agent) continue;
+    if (!isLeaseActive(lease)) continue;
+    active.add(leaseRenewalKey(store, task.frontmatter.id));
+  }
+
+  const prefix = `${store.projectId}:`;
+  for (const key of leaseRenewalTimers.keys()) {
+    if (!key.startsWith(prefix)) continue;
+    if (active.has(key)) continue;
+    const taskId = key.slice(prefix.length);
+    stopLeaseRenewal(store, taskId);
+  }
+}
+
+/**
+ * Check if a backlog task is eligible for promotion to ready.
+ * 
+ * @param task - Task to check
+ * @param allTasks - All tasks (for dependency lookup)
+ * @param childrenByParent - Map of parent→children tasks
+ * @returns Eligibility result with reason if blocked
+ */
+export function checkPromotionEligibility(
+  task: Task,
+  allTasks: Task[],
+  childrenByParent: Map<string, Task[]>
+): { eligible: boolean; reason?: string } {
+  
+  // 1. Check dependencies
+  const deps = task.frontmatter.dependsOn ?? [];
+  if (deps.length > 0) {
+    for (const depId of deps) {
+      const dep = allTasks.find(t => t.frontmatter.id === depId);
+      if (!dep) {
+        return { eligible: false, reason: `Missing dependency: ${depId}` };
+      }
+      if (dep.frontmatter.status !== "done") {
+        return { eligible: false, reason: `Waiting on dependency: ${depId}` };
+      }
+    }
+  }
+
+  // 2. Check subtasks (parentId references)
+  const subtasks = childrenByParent.get(task.frontmatter.id) ?? [];
+  const incompleteSubtasks = subtasks.filter(st => st.frontmatter.status !== "done");
+  if (incompleteSubtasks.length > 0) {
+    return { 
+      eligible: false, 
+      reason: `Waiting on ${incompleteSubtasks.length} subtask(s)` 
+    };
+  }
+
+  // 3. Check routing target
+  const routing = task.frontmatter.routing;
+  const hasTarget = routing.agent || routing.role || routing.team;
+  if (!hasTarget) {
+    return { 
+      eligible: false, 
+      reason: "No routing target (needs agent/role/team)" 
+    };
+  }
+
+  // 4. Check active lease (shouldn't happen in backlog, but safety check)
+  if (isLeaseActive(task.frontmatter.lease)) {
+    return { 
+      eligible: false, 
+      reason: "Active lease (corrupted state?)" 
+    };
+  }
+
+  // 5. Future: Check approval gate (Phase 2)
+  // const requiresApproval = task.frontmatter.metadata?.requiresApproval;
+  // if (requiresApproval) {
+  //   return { eligible: false, reason: "Requires manual approval" };
+  // }
+
+  return { eligible: true };
+}
+
+/**
+ * Load project manifest from project.yaml file.
+ * 
+ * @param store - Task store
+ * @param projectId - Project identifier
+ * @returns Project manifest or null if not found
+ */
+async function loadProjectManifest(
+  store: TaskStore,
+  projectId: string
+): Promise<ProjectManifest | null> {
+  try {
+    const projectPath = join(store.projectRoot, "projects", projectId, "project.yaml");
+    const content = await readFile(projectPath, "utf-8");
+    const manifest = parseYaml(content) as ProjectManifest;
+    return manifest;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Check for tasks exceeding gate timeouts and escalate.
+ * 
+ * @param store - Task store
+ * @param logger - Event logger
+ * @param config - Scheduler config
+ * @param metrics - Optional metrics instance
+ * @returns Array of scheduler actions (alerts for timeouts)
+ */
+async function checkGateTimeouts(
+  store: TaskStore,
+  logger: EventLogger,
+  config: SchedulerConfig,
+  metrics?: import("../metrics/exporter.js").AOFMetrics
+): Promise<SchedulerAction[]> {
+  const actions: SchedulerAction[] = [];
+  const now = Date.now();
+  
+  // Scan all in-progress tasks
+  const tasks = await store.list({ status: "in-progress" });
+  
+  for (const task of tasks) {
+    // Skip tasks not in gate workflow
+    if (!task.frontmatter.gate) continue;
+    
+    // Load project workflow
+    const projectId = task.frontmatter.project;
+    if (!projectId) continue;
+    
+    const projectManifest = await loadProjectManifest(store, projectId);
+    if (!projectManifest?.workflow) continue;
+    
+    const workflow = projectManifest.workflow;
+    const currentGate = workflow.gates.find(g => g.id === task.frontmatter.gate?.current);
+    if (!currentGate) continue;
+    
+    // Check if gate has timeout configured
+    if (!currentGate.timeout) continue;
+    
+    // Parse timeout duration
+    const timeoutMs = parseDuration(currentGate.timeout);
+    if (!timeoutMs) {
+      console.warn(
+        `[AOF] Invalid timeout format for gate ${currentGate.id}: ${currentGate.timeout}`
+      );
+      continue;
+    }
+    
+    // Check if task has exceeded timeout
+    const entered = new Date(task.frontmatter.gate.entered).getTime();
+    const elapsed = now - entered;
+    
+    if (elapsed > timeoutMs) {
+      // Timeout exceeded - escalate
+      const action = await escalateGateTimeout(
+        task,
+        currentGate,
+        workflow,
+        elapsed,
+        store,
+        logger,
+        config,
+        metrics
+      );
+      actions.push(action);
+    }
+  }
+  
+  return actions;
+}
+
+/**
+ * Escalate a task that has exceeded gate timeout.
+ * 
+ * @param task - Task that exceeded timeout
+ * @param gate - Gate with timeout
+ * @param workflow - Workflow config
+ * @param elapsedMs - Time elapsed in gate (milliseconds)
+ * @param store - Task store
+ * @param logger - Event logger
+ * @param config - Scheduler config
+ * @returns Scheduler action (alert)
+ */
+async function escalateGateTimeout(
+  task: Task,
+  gate: { id: string; role: string; timeout?: string; escalateTo?: string },
+  workflow: WorkflowConfig,
+  elapsedMs: number,
+  store: TaskStore,
+  logger: EventLogger,
+  config: SchedulerConfig,
+  metrics?: import("../metrics/exporter.js").AOFMetrics
+): Promise<SchedulerAction> {
+  const escalateToRole = gate.escalateTo;
+  
+  if (!escalateToRole) {
+    // No escalation target - just log and emit metric
+    console.warn(
+      `[AOF] Gate timeout: task ${task.frontmatter.id} exceeded ${gate.timeout} at gate ${gate.id}, no escalation configured`
+    );
+    
+    try {
+      await logger.log("gate_timeout", "scheduler", {
+        taskId: task.frontmatter.id,
+        payload: {
+          gate: gate.id,
+          elapsed: elapsedMs,
+          timeout: gate.timeout,
+        },
+      });
+      
+      // Record timeout metric
+      if (metrics) {
+        const project = task.frontmatter.project ?? store.projectId;
+        metrics.recordGateTimeout(project, workflow.name, gate.id);
+      }
+    } catch {
+      // Logging errors should not crash the scheduler
+    }
+    
+    return {
+      type: "alert",
+      taskId: task.frontmatter.id,
+      taskTitle: task.frontmatter.title,
+      reason: `Gate ${gate.id} timeout (${Math.floor(elapsedMs / 1000)}s), no escalation configured`,
+    };
+  }
+  
+  // Don't mutate in dry-run mode
+  if (!config.dryRun) {
+    // Update task routing to escalation role
+    task.frontmatter.routing.role = escalateToRole;
+    task.frontmatter.updatedAt = new Date().toISOString();
+    
+    // Add note to gate history
+    const historyEntry = {
+      gate: gate.id,
+      role: gate.role,
+      entered: task.frontmatter.gate!.entered,
+      exited: new Date().toISOString(),
+      outcome: "blocked" as const,
+      summary: `Timeout exceeded (${Math.floor(elapsedMs / 1000)}s), escalated to ${escalateToRole}`,
+      blockers: [`Timeout: no response from ${gate.role} within ${gate.timeout}`],
+      duration: Math.floor(elapsedMs / 1000),
+    };
+    
+    task.frontmatter.gateHistory = [
+      ...(task.frontmatter.gateHistory ?? []),
+      historyEntry,
+    ];
+    
+    // Update task
+    const serialized = serializeTask(task);
+    const taskPath = task.path ?? join(store.tasksDir, task.frontmatter.status, `${task.frontmatter.id}.md`);
+    await writeFileAtomic(taskPath, serialized);
+    
+    // Log event
+    try {
+      await logger.log("gate_timeout_escalation", "scheduler", {
+        taskId: task.frontmatter.id,
+        payload: {
+          gate: gate.id,
+          fromRole: gate.role,
+          toRole: escalateToRole,
+          elapsed: elapsedMs,
+          timeout: gate.timeout,
+        },
+      });
+      
+      // Record timeout and escalation metrics
+      if (metrics) {
+        const project = task.frontmatter.project ?? store.projectId;
+        metrics.recordGateTimeout(project, workflow.name, gate.id);
+        metrics.recordGateEscalation(project, workflow.name, gate.id, escalateToRole);
+      }
+    } catch {
+      // Logging errors should not crash the scheduler
+    }
+  }
+  
+  return {
+    type: "alert",
+    taskId: task.frontmatter.id,
+    taskTitle: task.frontmatter.title,
+    agent: escalateToRole,
+    reason: `Gate ${gate.id} timeout, escalated from ${gate.role} to ${escalateToRole}`,
+  };
+}
+
 /**
  * Run one scheduler poll cycle.
  *
@@ -72,12 +420,14 @@ export async function poll(
   store: TaskStore,
   logger: EventLogger,
   config: SchedulerConfig,
+  metrics?: import("../metrics/exporter.js").AOFMetrics,
 ): Promise<PollResult> {
   const start = performance.now();
   const actions: SchedulerAction[] = [];
 
   // 1. List all tasks
   const allTasks = await store.list();
+  cleanupLeaseRenewals(store, allTasks);
 
   const childrenByParent = new Map<string, Task[]>();
   for (const task of allTasks) {
@@ -208,8 +558,64 @@ export async function poll(
     }
   }
 
+  // 3.8. Check for SLA violations (AOF-ae6: SLA scheduler integration)
+  const slaChecker = config.slaChecker ?? new SLAChecker();
+  const projectManifest = {}; // TODO: Load from project.yaml when available
+  const slaViolations = slaChecker.checkViolations(allTasks, projectManifest);
+  
+  for (const violation of slaViolations) {
+    const shouldAlert = slaChecker.shouldAlert(violation.taskId);
+    const durationHrs = (violation.duration / 3600000).toFixed(1);
+    const limitHrs = (violation.limit / 3600000).toFixed(1);
+    
+    actions.push({
+      type: "sla_violation",
+      taskId: violation.taskId,
+      taskTitle: violation.title,
+      agent: violation.agent,
+      reason: shouldAlert
+        ? `SLA violation: ${durationHrs}h in-progress (limit: ${limitHrs}h) — alert will be sent`
+        : `SLA violation: ${durationHrs}h in-progress (limit: ${limitHrs}h) — alert rate-limited`,
+      duration: violation.duration,
+      limit: violation.limit,
+    });
+  }
+
+  // 3.9. Check for gate timeouts (AOF-69l: gate timeout detection)
+  const timeoutActions = await checkGateTimeouts(store, logger, config, metrics);
+  actions.push(...timeoutActions);
+
+  // 3.1. Check for backlog tasks that can be promoted
+  const backlogTasks = allTasks.filter(t => t.frontmatter.status === "backlog");
+  
+  for (const task of backlogTasks) {
+    // Check promotion eligibility
+    const canPromote = checkPromotionEligibility(task, allTasks, childrenByParent);
+    
+    if (canPromote.eligible) {
+      actions.push({
+        type: "promote",
+        taskId: task.frontmatter.id,
+        taskTitle: task.frontmatter.title,
+        reason: "Auto-promotion: all requirements met",
+        fromStatus: "backlog",
+        toStatus: "ready",
+      });
+    }
+  }
+
   // 4. Check for ready tasks that can be assigned
   const readyTasks = allTasks.filter(t => t.frontmatter.status === "ready");
+  const maxDispatches = effectiveConcurrencyLimit ?? config.maxConcurrentDispatches ?? 3;
+  const currentInProgress = stats.inProgress;
+  let pendingDispatches = 0;
+  
+  // Log concurrency status
+  console.info(
+    `[AOF] Concurrency limit: ${currentInProgress}/${maxDispatches} in-progress` +
+    (effectiveConcurrencyLimit !== null ? ` (platform-adjusted from ${config.maxConcurrentDispatches ?? 3})` : "")
+  );
+  
   for (const task of readyTasks) {
     if (blockedBySubtasks.has(task.frontmatter.id)) continue;
     
@@ -261,6 +667,12 @@ export async function poll(
       continue;
     }
     
+    // Concurrency cap: skip if at capacity
+    if (currentInProgress + pendingDispatches >= maxDispatches) {
+      console.info(`[AOF] Concurrency cap: skipping ${task.frontmatter.id} (${currentInProgress} in-progress + ${pendingDispatches} pending >= ${maxDispatches})`);
+      continue;
+    }
+    
     const routing = task.frontmatter.routing;
     const targetAgent = routing.agent ?? routing.role ?? routing.team;
 
@@ -272,6 +684,7 @@ export async function poll(
         agent: targetAgent,
         reason: `Pending task with routing target: ${targetAgent}`,
       });
+      pendingDispatches++;
     } else if (routing.tags && routing.tags.length > 0) {
       // GAP-004 fix: Task has tags but no explicit agent/role/team
       // Log error and create alert action (tags-only routing not supported)
@@ -376,6 +789,7 @@ export async function poll(
   let actionsFailed = 0;
   let leasesExpired = 0;  // BUG-AUDIT-004: Track lease expiry count
   let tasksRequeued = 0;  // BUG-AUDIT-004: Track requeue count
+  let tasksPromoted = 0;  // TASK-2026-02-14: Track promotion count
   
   if (!config.dryRun) {
     for (const action of actions) {
@@ -585,23 +999,45 @@ export async function poll(
 
                 // Acquire lease first (this also transitions ready → in-progress)
                 console.info(`[AOF] [BUG-001] Acquiring lease for task ${action.taskId}`);
-                await acquireLease(store, action.taskId, action.agent!, {
+                const leasedTask = await acquireLease(store, action.taskId, action.agent!, {
                   ttlMs: config.defaultLeaseTtlMs,
                 });
                 console.info(`[AOF] [BUG-001] Lease acquired for task ${action.taskId}`);
 
-                // Build task context
-                const taskPath = task.path ?? store.tasksDir;
+                // Build task context using post-lease task path (now in-progress/)
+                const taskPath =
+                  leasedTask?.path ?? join(store.tasksDir, "in-progress", `${action.taskId}.md`);
                 const context: TaskContext = {
                   taskId: action.taskId,
                   taskPath,
                   agent: action.agent!,
-                  priority: task.frontmatter.priority,
-                  routing: task.frontmatter.routing,
+                  priority: leasedTask?.frontmatter.priority ?? task.frontmatter.priority,
+                  routing: leasedTask?.frontmatter.routing ?? task.frontmatter.routing,
                   projectId: store.projectId,
                   projectRoot: store.projectRoot,
                   taskRelpath: relative(store.projectRoot, taskPath),
                 };
+
+                // AOF-ofi: Inject gate context for workflow tasks (Progressive Disclosure L2)
+                const taskForContext = leasedTask ?? task;
+                if (taskForContext.frontmatter.gate) {
+                  const projectId = taskForContext.frontmatter.project;
+                  const projectManifest = await loadProjectManifest(store, projectId);
+                  
+                  if (projectManifest?.workflow) {
+                    const currentGate = projectManifest.workflow.gates.find(
+                      (g) => g.id === taskForContext.frontmatter.gate?.current
+                    );
+                    
+                    if (currentGate) {
+                      context.gateContext = buildGateContext(
+                        taskForContext,
+                        currentGate,
+                        projectManifest.workflow
+                      );
+                    }
+                  }
+                }
 
                 // BUG-001 diagnostic: Log immediately before executor invocation
                 console.info(`[AOF] [BUG-001] Invoking executor.spawn() for task ${action.taskId}, agent ${action.agent}`);
@@ -635,9 +1071,50 @@ export async function poll(
                   } catch {
                     // Logging errors should not crash the scheduler
                   }
-                  
+
+                  startLeaseRenewal(store, action.taskId, action.agent!, config.defaultLeaseTtlMs);
                   executed = true;
                 } else {
+                  // Check if this is a platform concurrency limit error
+                  if (result.platformLimit !== undefined) {
+                    const previousCap = effectiveConcurrencyLimit ?? config.maxConcurrentDispatches ?? 3;
+                    effectiveConcurrencyLimit = Math.min(result.platformLimit, config.maxConcurrentDispatches ?? 3);
+                    
+                    console.info(
+                      `[AOF] Platform concurrency limit detected: ${result.platformLimit}, ` +
+                      `effective cap now ${effectiveConcurrencyLimit} (was ${previousCap})`
+                    );
+                    
+                    // Emit event (non-fatal if logging fails)
+                    try {
+                      await logger.log("concurrency.platformLimit", "scheduler", {
+                        taskId: action.taskId,
+                        payload: {
+                          detectedLimit: result.platformLimit,
+                          effectiveCap: effectiveConcurrencyLimit,
+                          previousCap,
+                        },
+                      });
+                    } catch (logErr) {
+                      console.error(`[AOF] Failed to log concurrency.platformLimit event: ${(logErr as Error).message}`);
+                    }
+                    
+                    // Release lease — task transitions back to ready (not blocked)
+                    try {
+                      await releaseLease(store, action.taskId, action.agent!);
+                    } catch (releaseErr) {
+                      console.error(`[AOF] Failed to release lease for ${action.taskId}: ${(releaseErr as Error).message}`);
+                    }
+                    
+                    // No retry count increment - this is capacity exhaustion, not failure
+                    console.info(
+                      `[AOF] Task ${action.taskId} requeued to ready (platform capacity exhausted, ` +
+                      `will retry next poll)`
+                    );
+                    
+                    continue; // Skip normal block transition and move to next action
+                  }
+                  
                   // BUG-003: Log spawn failure with full context
                   console.error(`[AOF] [BUG-003] Executor spawn failed for task ${action.taskId}:`);
                   console.error(`[AOF] [BUG-003]   Agent: ${action.agent}`);
@@ -735,12 +1212,66 @@ export async function poll(
             }
             // If no executor, assign action is just logged (not executed)
             break;
+          case "promote": {
+            const { taskId, fromStatus, toStatus } = action;
+            await store.transition(taskId, toStatus as TaskStatus, {
+              agent: "aof-scheduler",
+              reason: action.reason,
+            });
+            
+            try {
+              await logger.logTransition(
+                taskId,
+                fromStatus ?? "backlog",
+                toStatus ?? "ready",
+                "scheduler",
+                action.reason
+              );
+            } catch {
+              // Logging errors should not crash the scheduler
+            }
+            
+            tasksPromoted++;
+            
+            // executed remains false - this is a status transition, not a dispatch
+            break;
+          }
           case "alert":
             // BUG-TELEMETRY-002: Use console.error for gateway log visibility
             // Alert actions are logged but not executed (Phase 1+: need comms adapter)
             console.error(`[AOF] ALERT: Task ${action.taskId} (${action.taskTitle}) needs routing assignment`);
             console.error(`[AOF] ALERT:   Reason: ${action.reason}`);
             console.error(`[AOF] ALERT:   Action: Manually assign via aof_dispatch --agent <agent-id> or update task routing`);
+            break;
+          case "sla_violation":
+            // AOF-ae6: SLA violation detected
+            // Log to events.jsonl
+            try {
+              await logger.log("sla.violation", "scheduler", {
+                taskId: action.taskId,
+                payload: {
+                  duration: action.duration,
+                  limit: action.limit,
+                  agent: action.agent,
+                  timestamp: Date.now(),
+                },
+              });
+            } catch {
+              // Logging errors should not crash the scheduler
+            }
+
+            // Emit alert if not rate-limited
+            if (action.reason?.includes("alert will be sent")) {
+              slaChecker.recordAlert(action.taskId);
+              
+              const durationHrs = ((action.duration ?? 0) / 3600000).toFixed(1);
+              const limitHrs = ((action.limit ?? 0) / 3600000).toFixed(1);
+              
+              console.error(`[AOF] SLA VIOLATION: Task ${action.taskId} (${action.taskTitle})`);
+              console.error(`[AOF] SLA VIOLATION:   Duration: ${durationHrs}h (limit: ${limitHrs}h)`);
+              console.error(`[AOF] SLA VIOLATION:   Agent: ${action.agent ?? "unassigned"}`);
+              console.error(`[AOF] SLA VIOLATION:   Action: Check if agent is stuck or task needs SLA override`);
+            }
             break;
         }
         if (executed) {
@@ -800,6 +1331,7 @@ export async function poll(
     alertsRaised: alertActions.length,  // BUG-TELEMETRY-001: Include alert count
     leasesExpired: config.dryRun ? 0 : leasesExpired,  // BUG-AUDIT-004: Lease expiry count
     tasksRequeued: config.dryRun ? 0 : tasksRequeued,  // BUG-AUDIT-004: Requeue count
+    tasksPromoted: config.dryRun ? 0 : tasksPromoted,  // TASK-2026-02-14: Promotion count
     stats,
   };
 

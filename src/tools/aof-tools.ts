@@ -2,6 +2,7 @@ import { TaskStore } from "../store/task-store.js";
 import { EventLogger } from "../events/logger.js";
 import type { TaskStatus, TaskPriority } from "../schemas/task.js";
 import { wrapResponse, compactResponse, type ToolResponseEnvelope } from "./envelope.js";
+import { handleGateTransition } from "../dispatch/gate-transition-handler.js";
 
 export interface ToolContext {
   store: TaskStore;
@@ -49,6 +50,10 @@ export interface AOFTaskCompleteInput {
   taskId: string;
   actor?: string;
   summary?: string;
+  // Gate workflow fields (optional — only used when task is in a workflow)
+  outcome?: import("../schemas/gate.js").GateOutcome;
+  blockers?: string[];
+  rejectionNotes?: string;
 }
 
 export interface AOFTaskCompleteResult extends ToolResponseEnvelope {
@@ -85,6 +90,87 @@ function normalizePriority(priority?: string): TaskPriority {
     return normalized as TaskPriority;
   }
   return "normal";
+}
+
+/**
+ * Validate gate completion parameters with teaching error messages.
+ * 
+ * Progressive Disclosure Level 3 — when agents make mistakes, the error teaches
+ * them the correct approach.
+ * 
+ * @param store - Task store instance
+ * @param task - Task being completed
+ * @param input - Completion input parameters
+ * @throws Error with actionable teaching message if validation fails
+ */
+async function validateGateCompletion(
+  store: TaskStore,
+  task: import("../schemas/task.js").Task,
+  input: AOFTaskCompleteInput
+): Promise<void> {
+  const outcome = input.outcome;
+  
+  // Scenario 1: Invalid outcome value
+  const validOutcomes = ["complete", "needs_review", "blocked"];
+  if (outcome && !validOutcomes.includes(outcome)) {
+    throw new Error(
+      `Invalid gate outcome. Expected one of: complete, needs_review, blocked. ` +
+      `You sent '${outcome}'. Use 'complete' to advance to the next gate, ` +
+      `'needs_review' to send work back for revision, or 'blocked' when external ` +
+      `dependencies prevent progress.`
+    );
+  }
+  
+  // Load project manifest to check gate configuration
+  if (outcome && (outcome === "needs_review" || outcome === "blocked")) {
+    const { loadProjectManifest } = await import("../dispatch/gate-transition-handler.js");
+    const projectManifest = await loadProjectManifest(store.projectRoot);
+    
+    if (!projectManifest.workflow) {
+      // No workflow - graceful fallback, no validation needed
+      return;
+    }
+    
+    const currentGate = task.frontmatter.gate?.current;
+    const gateConfig = projectManifest.workflow.gates.find(g => g.id === currentGate);
+    
+    if (!gateConfig) {
+      throw new Error(`Current gate ${currentGate} not found in workflow`);
+    }
+    
+    // Scenario 2: Rejection at non-rejectable gate
+    if (outcome === "needs_review" && !gateConfig.canReject) {
+      throw new Error(
+        `This gate (${currentGate}) does not allow rejection. ` +
+        `Use 'complete' to advance to the next gate, or 'blocked' if you're waiting ` +
+        `on external dependencies. If work truly needs to be redone, coordinate with ` +
+        `the workflow owner to enable rejection for this gate.`
+      );
+    }
+    
+    // Scenario 3: needs_review without rejectionNotes
+    if (outcome === "needs_review") {
+      if (!input.rejectionNotes || input.rejectionNotes.trim().length === 0) {
+        throw new Error(
+          `When rejecting work (needs_review), you must provide rejectionNotes ` +
+          `explaining what needs to change. Be specific: what's wrong, why it needs ` +
+          `to change, and what success looks like. Example: "Missing error handling ` +
+          `for expired tokens. Add try-catch blocks and retry logic."`
+        );
+      }
+    }
+    
+    // Scenario 4: blocked without blockers
+    if (outcome === "blocked") {
+      if (!input.blockers || input.blockers.length === 0) {
+        throw new Error(
+          `When marking blocked, provide a blockers array listing what's preventing ` +
+          `progress. Be specific so others can help unblock you. Example: ` +
+          `["Waiting for API spec from platform team", "Need production database access"]`
+        );
+      }
+    }
+  }
 }
 
 export async function aofDispatch(
@@ -222,6 +308,45 @@ export async function aofTaskComplete(
   const task = await resolveTask(ctx.store, input.taskId);
   let updatedTask = task;
 
+  // If task is in a gate workflow AND outcome provided, use gate transition handler
+  // Backward compatible: tasks not in gate workflows use legacy path below
+  if (task.frontmatter.gate && input.outcome) {
+    // Validate gate completion parameters before processing
+    await validateGateCompletion(ctx.store, task, input);
+    
+    await handleGateTransition(
+      ctx.store,
+      ctx.logger,
+      input.taskId,
+      input.outcome,
+      {
+        summary: input.summary ?? "Completed",
+        blockers: input.blockers,
+        rejectionNotes: input.rejectionNotes,
+        agent: actor,
+      }
+    );
+    
+    // Reload task to get updated state
+    const reloadedTask = await ctx.store.get(input.taskId);
+    if (!reloadedTask) {
+      throw new Error(`Task ${input.taskId} not found after gate transition`);
+    }
+    
+    const summary = `Task ${input.taskId} transitioned through gate workflow`;
+    const envelope = compactResponse(summary, {
+      taskId: input.taskId,
+      status: reloadedTask.frontmatter.status,
+    });
+    
+    return {
+      ...envelope,
+      taskId: input.taskId,
+      status: reloadedTask.frontmatter.status,
+    };
+  }
+
+  // Legacy completion path (no workflow)
   if (input.summary) {
     const body = task.body ? `${task.body}\n\n## Completion Summary\n${input.summary}` : `## Completion Summary\n${input.summary}`;
     updatedTask = await ctx.store.updateBody(task.frontmatter.id, body);
@@ -305,6 +430,7 @@ export async function aofStatusReport(
     blocked: 0,
     review: 0,
     done: 0,
+    deadletter: 0,
   };
 
   for (const task of tasks) {

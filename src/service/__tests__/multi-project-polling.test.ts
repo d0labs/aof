@@ -182,7 +182,7 @@ Test task for multi-project polling.
     // Verify project fields are present
     expect(context.projectId).toBe("project-gamma");
     expect(context.projectRoot).toBe(proj1);
-    expect(context.taskRelpath).toBe("tasks/ready/TASK-2026-02-12-003.md");
+    expect(context.taskRelpath).toBe("tasks/in-progress/TASK-2026-02-12-003.md");
 
     await service.stop();
   });

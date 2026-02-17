@@ -76,6 +76,16 @@ describe("lintOrgChart", () => {
     expect(issues.some(i => i.rule === "valid-routing-target")).toBe(true);
   });
 
+  it("detects role mappings to missing agents", () => {
+    const chart = makeChart({
+      roles: {
+        backend: { agents: ["ghost-agent"] },
+      },
+    });
+    const issues = lintOrgChart(chart);
+    expect(issues.some(i => i.rule === "valid-role-agent")).toBe(true);
+  });
+
   it("detects circular reporting chains", () => {
     const chart = makeChart({
       teams: [{ id: "swe", name: "SWE" }],

@@ -100,6 +100,22 @@ export function lintOrgChart(chart: OrgChart): LintIssue[] {
     }
   }
 
+  // Check role mappings reference valid agents
+  if (chart.roles) {
+    for (const [roleName, role] of Object.entries(chart.roles)) {
+      for (const agentId of role.agents) {
+        if (!agentIds.has(agentId)) {
+          issues.push({
+            severity: "error",
+            rule: "valid-role-agent",
+            message: `Role '${roleName}' references missing agent '${agentId}'`,
+            path: `roles.${roleName}.agents`,
+          });
+        }
+      }
+    }
+  }
+
   // Check for circular reporting chains
   for (const agent of chart.agents) {
     if (agent.reportsTo) {

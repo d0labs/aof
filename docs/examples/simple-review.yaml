@@ -1,0 +1,78 @@
+# Simple Review Workflow
+#
+# This is the minimal workflow for teams just getting started with Workflow Gates.
+# It defines a basic implement → review cycle with rejection capability.
+#
+# Use this as a template when you need:
+# - Basic quality gates without complex conditionals
+# - Quick turnaround on small changes
+# - Learning how Workflow Gates work before adopting a full SDLC
+#
+# To use this workflow:
+# 1. Copy this file to your project root as `project.yaml`
+# 2. Create an org chart defining "developer" and "reviewer" roles
+# 3. Create tasks with `routing.workflow: simple-review`
+# 4. Agents will automatically progress tasks through gates
+
+workflow:
+  # Unique workflow name — referenced in task frontmatter (routing.workflow: simple-review)
+  name: simple-review
+  
+  # Rejection strategy: where do rejected tasks loop back?
+  # "origin" = always return to the first gate (implement)
+  # This is the simplest and most predictable rejection behavior
+  rejectionStrategy: origin
+  
+  # Gates define discrete stages where work happens
+  # Tasks progress through gates in order, skipping gates with false conditionals
+  gates:
+    # Gate 1: Implementation
+    # This is where the work gets done — agents implement features, fix bugs, etc.
+    - id: implement
+      role: developer              # Org chart role responsible for this gate
+      description: "Implement the feature or fix with tests"
+      
+      # The first gate cannot have canReject: true (nowhere to loop back to)
+      # Implementation work is the starting point, not a review step
+      
+      # Optional: timeout and escalation (uncomment to enable)
+      # timeout: 2h                # Auto-escalate if stuck for 2 hours
+      # escalateTo: tech-lead      # Role to escalate to on timeout
+    
+    # Gate 2: Review
+    # Reviewer checks quality, correctness, and completeness
+    # Can approve (advance) or reject (send back to implement)
+    - id: review
+      role: reviewer               # Org chart role that performs review
+      canReject: true              # This gate can send tasks back to implement
+      description: "Review code quality, tests, and correctness"
+      
+      # Optional: timeout and escalation (uncomment to enable)
+      # timeout: 1h                # Auto-escalate if reviewer doesn't respond
+      # escalateTo: senior-reviewer # Role to escalate to on timeout
+  
+  # Outcome semantic mapping (helps agents understand what each outcome means)
+  # These are hints, not enforced behavior — agents still choose outcomes
+  outcomes:
+    complete: advance              # Move to next gate (or mark done if last gate)
+    needs_review: reject           # Loop back to implement gate for fixes
+    blocked: hold                  # Stay in current gate, external blocker
+
+# Example org chart (org.yaml) to pair with this workflow:
+#
+# schemaVersion: 1
+# agents:
+#   - id: dev-1
+#     name: "Developer Agent 1"
+#     active: true
+#   - id: reviewer-1
+#     name: "Reviewer Agent 1"
+#     active: true
+#
+# roles:
+#   developer:
+#     agents: [dev-1]
+#     description: "Implements features and fixes"
+#   reviewer:
+#     agents: [reviewer-1]
+#     description: "Reviews code quality and correctness"

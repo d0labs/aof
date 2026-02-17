@@ -219,3 +219,17 @@ routing:
   - matchTags: ["docs", "documentation"]
     targetAgent: "swe-tech-writer"
     weight: 20
+
+# Daemon Health Monitoring (Watchdog) Configuration
+# See: docs/design/DAEMON-WATCHDOG-DESIGN.md
+aof:
+  daemon:
+    watchdog:
+      enabled: false  # Disabled by default (opt-in for OpenClaw deployments)
+      pollIntervalMs: 60000  # Health check every 60s
+      restartPolicy:
+        maxRestarts: 3  # Max restarts in window
+        windowMs: 3600000  # 1 hour window (in milliseconds)
+      alerting:
+        channel: slack  # slack | discord | email
+        webhook: ""  # Configure webhook URL for alerts

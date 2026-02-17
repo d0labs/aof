@@ -79,6 +79,11 @@ describe("TaskFrontmatter", () => {
     }
   });
 
+  it("parses a valid subtask id", () => {
+    const result = TaskFrontmatter.safeParse({ ...validTask, id: "TASK-2026-02-06-001-01" });
+    expect(result.success).toBe(true);
+  });
+
   it("rejects missing required fields", () => {
     const { title: _, ...noTitle } = validTask;
     expect(TaskFrontmatter.safeParse(noTitle).success).toBe(false);

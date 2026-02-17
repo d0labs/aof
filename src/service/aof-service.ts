@@ -14,6 +14,8 @@ export interface AOFServiceConfig {
   defaultLeaseTtlMs?: number;
   /** Root directory for vault (Projects/, Resources/). If provided, enables multi-project mode. */
   vaultRoot?: string;
+  /** Maximum concurrent in-progress tasks across all agents (default: 3). */
+  maxConcurrentDispatches?: number;
 }
 
 export interface AOFServiceDependencies {
@@ -89,6 +91,7 @@ export class AOFService {
       dryRun: config.dryRun ?? true,
       defaultLeaseTtlMs: config.defaultLeaseTtlMs ?? 600_000,
       executor: deps.executor,
+      maxConcurrentDispatches: config.maxConcurrentDispatches,
     };
   }
 

@@ -5,7 +5,7 @@
  * Uses the BaseEvent schema from schemas/event.ts.
  */
 
-import { appendFile, mkdir, symlink, unlink } from "node:fs/promises";
+import { appendFile, mkdir, symlink, unlink, readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { EventType, BaseEvent } from "../schemas/event.js";
 
@@ -192,5 +192,43 @@ export class EventLogger {
     await this.log("task.validation.failed", "system", {
       payload: { filename, errors },
     });
+  }
+
+  /**
+   * Query events from the log.
+   * 
+   * Reads all JSONL files in the events directory and filters by criteria.
+   * 
+   * @param filter - Filter criteria (e.g., { type: "sla.violation" })
+   * @returns Array of matching events
+   */
+  async query(filter?: { type?: string; taskId?: string; actor?: string }): Promise<BaseEvent[]> {
+    const files = await readdir(this.eventsDir);
+    const jsonlFiles = files.filter(f => f.endsWith('.jsonl') && f !== 'events.jsonl');
+    
+    const events: BaseEvent[] = [];
+    
+    for (const file of jsonlFiles) {
+      const filePath = join(this.eventsDir, file);
+      const content = await readFile(filePath, 'utf-8');
+      const lines = content.trim().split('\n').filter(line => line.length > 0);
+      
+      for (const line of lines) {
+        try {
+          const event = JSON.parse(line) as BaseEvent;
+          
+          // Apply filters
+          if (filter?.type && event.type !== filter.type) continue;
+          if (filter?.taskId && event.taskId !== filter.taskId) continue;
+          if (filter?.actor && event.actor !== filter.actor) continue;
+          
+          events.push(event);
+        } catch {
+          // Skip malformed lines
+        }
+      }
+    }
+    
+    return events;
   }
 }

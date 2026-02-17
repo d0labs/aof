@@ -1,0 +1,209 @@
+# Sales Pipeline Workflow
+#
+# This workflow demonstrates the domain-neutrality of Workflow Gates by applying
+# the same primitive to a sales qualification and closing process.
+#
+# This is NOT a software workflow — it tracks sales opportunities through
+# qualification, proposal, negotiation, and closing stages.
+#
+# Key features:
+# - Multi-stage sales progression: qualify → propose → negotiate → close
+# - Conditional legal review for enterprise deals (contract value > threshold)
+# - Rejection loops: any stage can send back to re-qualify or adjust proposal
+# - Human approval: final close requires VP Sales sign-off
+# - Timeout enforcement: SLA tracking for each stage with escalation
+#
+# Use this workflow to demonstrate:
+# - How Workflow Gates works outside of software engineering
+# - That gates, rejection, and progression are domain-agnostic primitives
+# - That AOF can orchestrate ANY staged process, not just code reviews
+#
+# To use this workflow:
+# 1. Define an org chart with sales roles (bdr, ae, sales-eng, legal, vp-sales)
+# 2. Create tasks representing sales opportunities
+# 3. Tag tasks with metadata like "enterprise" or "legal-review" to trigger conditionals
+# 4. Track progression from lead → close with full audit trail
+
+workflow:
+  # Unique workflow identifier
+  name: sales-pipeline
+  
+  # Rejection strategy: where do rejected opportunities loop back?
+  # "origin" = always return to first gate (qualification)
+  # If a proposal is rejected in negotiation, re-qualify the opportunity
+  rejectionStrategy: origin
+  
+  # Ordered gate sequence — sales opportunities flow through these stages
+  gates:
+    # ========================================================================
+    # GATE 1: Lead Qualification
+    # ========================================================================
+    # Business Development Rep (BDR) qualifies inbound leads
+    # Determines if lead is a good fit, has budget, and has urgency (BANT)
+    - id: qualify
+      role: bdr                              # Business Development Rep
+      description: "Qualify lead: Budget, Authority, Need, Timeline (BANT)"
+      timeout: 24h                           # Qualify within 1 business day
+      escalateTo: sales-manager              # Escalate to sales manager if stuck
+      
+      # Note: First gate cannot reject (nowhere to loop back to)
+    
+    # ========================================================================
+    # GATE 2: Proposal Development
+    # ========================================================================
+    # Account Executive (AE) or Sales Engineer creates proposal
+    # Includes solution design, pricing, and statement of work
+    - id: propose
+      role: ae                               # Account Executive
+      canReject: true                        # Can reject back to qualify if lead isn't ready
+      description: "Create proposal: solution design, pricing, SOW"
+      timeout: 48h                           # Proposal due within 2 business days
+      escalateTo: sales-manager              # Escalate to sales manager
+    
+    # ========================================================================
+    # GATE 3: Technical Review (Conditional)
+    # ========================================================================
+    # Sales Engineering validates technical feasibility
+    # Only activated for complex or custom solutions
+    - id: tech-review
+      role: sales-eng                        # Sales Engineer
+      canReject: true                        # Can reject if solution isn't feasible
+      description: "Validate technical feasibility and integration requirements"
+      when: "tags.includes('custom') || tags.includes('technical')"  # Conditional activation
+      timeout: 24h                           # Tech review SLA: 1 day
+      escalateTo: vp-eng                     # Escalate to VP Engineering
+    
+    # ========================================================================
+    # GATE 4: Legal Review (Conditional)
+    # ========================================================================
+    # Legal team reviews contract for enterprise deals
+    # Only activated for high-value deals or those requiring custom terms
+    - id: legal-review
+      role: legal                            # Legal counsel
+      canReject: true                        # Can reject if terms are unacceptable
+      description: "Review contract terms, compliance, and risk"
+      when: "tags.includes('enterprise') || tags.includes('legal-review')"  # Conditional activation
+      timeout: 48h                           # Legal review SLA: 2 days
+      escalateTo: general-counsel            # Escalate to General Counsel
+    
+    # ========================================================================
+    # GATE 5: Negotiation
+    # ========================================================================
+    # Account Executive negotiates terms with prospect
+    # Can loop back to propose if terms need adjustment
+    - id: negotiate
+      role: ae                               # Account Executive
+      canReject: true                        # Can reject back to propose if terms need revision
+      description: "Negotiate pricing, terms, and timeline with prospect"
+      timeout: 5d                            # Negotiation SLA: 5 business days
+      escalateTo: sales-director             # Escalate to sales director
+    
+    # ========================================================================
+    # GATE 6: Discount Approval (Conditional)
+    # ========================================================================
+    # VP Sales approves discounts beyond AE authority
+    # Only activated when discount exceeds threshold
+    - id: discount-approval
+      role: vp-sales                         # VP Sales
+      description: "Approve discount beyond standard AE authority"
+      when: "metadata.discount_pct > 15"     # Conditional: discounts >15% need approval
+      requireHuman: true                     # Human-only gate (no agent auto-approval)
+      timeout: 24h                           # Discount approval SLA: 1 day
+      escalateTo: cro                        # Escalate to Chief Revenue Officer
+    
+    # ========================================================================
+    # GATE 7: Final Close (Human-Only)
+    # ========================================================================
+    # VP Sales final approval and contract signature
+    # Requires human sign-off for all deals
+    - id: close
+      role: vp-sales                         # VP Sales
+      description: "Final approval and contract signature"
+      requireHuman: true                     # CRITICAL: Only humans can close deals
+      timeout: 48h                           # Close approval SLA: 2 days
+      escalateTo: cro                        # Escalate to CRO if VP Sales unavailable
+  
+  # Outcome semantic mappings
+  outcomes:
+    complete: advance                        # Proceed to next stage
+    needs_review: reject                     # Loop back to qualification for reassessment
+    blocked: hold                            # External blocker (e.g., waiting on customer)
+
+# Example task frontmatter for a sales opportunity:
+#
+# ---
+# id: OPP-2026-Q1-042
+# title: "Acme Corp - Enterprise Platform Deal"
+# status: in_progress
+# routing:
+#   workflow: sales-pipeline                 # Use sales workflow
+#   role: bdr                                # Current gate role
+# gate:
+#   current: qualify                         # Starting at qualification
+#   entered: 2026-02-16T09:00:00Z
+# tags: [enterprise, legal-review, custom]   # Triggers tech-review and legal-review gates
+# metadata:
+#   deal_value: 250000                       # $250k deal
+#   discount_pct: 20                         # 20% discount (triggers discount-approval)
+#   region: north-america
+#   industry: fintech
+# ---
+#
+# # Opportunity Details
+# - Customer: Acme Corp
+# - Contact: Jane Doe, VP Engineering
+# - Budget: $250k
+# - Timeline: Q1 close
+# - Competitors: CompetitorX, CompetitorY
+
+# Example org chart snippet (org.yaml) for sales workflow:
+#
+# schemaVersion: 1
+# agents:
+#   - id: bdr-1
+#     name: "Business Development Rep"
+#     active: true
+#   - id: ae-1
+#     name: "Account Executive"
+#     active: true
+#   - id: sales-eng-1
+#     name: "Sales Engineer"
+#     active: true
+#   - id: legal-1
+#     name: "Legal Counsel"
+#     active: true
+#   - id: vp-sales-1
+#     name: "VP Sales"
+#     active: true
+#
+# roles:
+#   bdr:
+#     agents: [bdr-1]
+#     description: "Lead qualification and initial outreach"
+#   ae:
+#     agents: [ae-1]
+#     description: "Proposal development and deal negotiation"
+#   sales-eng:
+#     agents: [sales-eng-1]
+#     description: "Technical validation and solution design"
+#   legal:
+#     agents: [legal-1]
+#     description: "Contract review and compliance"
+#   vp-sales:
+#     agents: [vp-sales-1]
+#     requireHuman: true                      # VP Sales is human-only
+#     description: "Final approval and contract signature"
+#   
+#   # Escalation roles
+#   sales-manager:
+#     agents: [ae-1]                          # In small teams, AE doubles as manager
+#   sales-director:
+#     agents: [vp-sales-1]
+#   vp-eng:
+#     agents: [sales-eng-1]
+#   general-counsel:
+#     agents: [legal-1]
+#   cro:
+#     agents: []
+#     requireHuman: true                      # Chief Revenue Officer is always human
+#     description: "Executive escalation point for sales"

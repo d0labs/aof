@@ -6,6 +6,7 @@
  */
 
 import type { TaskThinking } from "../schemas/task.js";
+import type { GateContext } from "./gate-context-builder.js";
 
 export interface TaskContext {
   taskId: string;
@@ -26,12 +27,15 @@ export interface TaskContext {
   projectRoot?: string;
   /** Task path relative to project root */
   taskRelpath?: string;
+  /** Gate context (transient, computed on dispatch) — Progressive Disclosure Level 2 */
+  gateContext?: GateContext;
 }
 
 export interface ExecutorResult {
   success: boolean;
   sessionId?: string;
   error?: string;
+  platformLimit?: number;  // OpenClaw platform concurrency limit (from error message)
 }
 
 export interface DispatchExecutor {

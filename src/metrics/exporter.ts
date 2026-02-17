@@ -56,6 +56,13 @@ export class AOFMetrics {
   readonly agentContextBytes: Gauge;
   readonly agentContextTokens: Gauge;
 
+  // Gate telemetry metrics
+  readonly gateDuration: Histogram;
+  readonly gateTransitionsTotal: Counter;
+  readonly gateRejectionsTotal: Counter;
+  readonly gateTimeoutsTotal: Counter;
+  readonly gateEscalationsTotal: Counter;
+
   constructor() {
     this.registry = new Registry();
 
@@ -149,6 +156,43 @@ export class AOFMetrics {
       labelNames: ["agentId"] as const,
       registers: [this.registry],
     });
+
+    // Gate telemetry metrics
+    this.gateDuration = new Histogram({
+      name: "aof_gate_duration_seconds",
+      help: "Time spent in each gate",
+      labelNames: ["project", "workflow", "gate", "outcome"] as const,
+      buckets: [60, 300, 600, 1800, 3600, 7200, 14400, 28800, 86400], // 1m to 24h
+      registers: [this.registry],
+    });
+
+    this.gateTransitionsTotal = new Counter({
+      name: "aof_gate_transitions_total",
+      help: "Total gate transitions",
+      labelNames: ["project", "workflow", "from_gate", "to_gate", "outcome"] as const,
+      registers: [this.registry],
+    });
+
+    this.gateRejectionsTotal = new Counter({
+      name: "aof_gate_rejections_total",
+      help: "Total gate rejections",
+      labelNames: ["project", "workflow", "gate", "rejected_by_role"] as const,
+      registers: [this.registry],
+    });
+
+    this.gateTimeoutsTotal = new Counter({
+      name: "aof_gate_timeouts_total",
+      help: "Total gate timeouts",
+      labelNames: ["project", "workflow", "gate"] as const,
+      registers: [this.registry],
+    });
+
+    this.gateEscalationsTotal = new Counter({
+      name: "aof_gate_escalations_total",
+      help: "Total gate escalations",
+      labelNames: ["project", "workflow", "gate", "escalated_to_role"] as const,
+      registers: [this.registry],
+    });
   }
 
   /**
@@ -221,6 +265,59 @@ export class AOFMetrics {
   recordAgentFootprint(agentId: string, totalChars: number, estimatedTokens: number): void {
     this.agentContextBytes.labels({ agentId }).set(totalChars);
     this.agentContextTokens.labels({ agentId }).set(estimatedTokens);
+  }
+
+  /** Record gate duration. */
+  recordGateDuration(
+    project: string,
+    workflow: string,
+    gate: string,
+    outcome: string,
+    seconds: number
+  ): void {
+    this.gateDuration.labels({ project, workflow, gate, outcome }).observe(seconds);
+  }
+
+  /** Record gate transition. */
+  recordGateTransition(
+    project: string,
+    workflow: string,
+    fromGate: string,
+    toGate: string,
+    outcome: string
+  ): void {
+    this.gateTransitionsTotal
+      .labels({ project, workflow, from_gate: fromGate, to_gate: toGate, outcome })
+      .inc();
+  }
+
+  /** Record gate rejection. */
+  recordGateRejection(
+    project: string,
+    workflow: string,
+    gate: string,
+    rejectedByRole: string
+  ): void {
+    this.gateRejectionsTotal
+      .labels({ project, workflow, gate, rejected_by_role: rejectedByRole })
+      .inc();
+  }
+
+  /** Record gate timeout. */
+  recordGateTimeout(project: string, workflow: string, gate: string): void {
+    this.gateTimeoutsTotal.labels({ project, workflow, gate }).inc();
+  }
+
+  /** Record gate escalation. */
+  recordGateEscalation(
+    project: string,
+    workflow: string,
+    gate: string,
+    escalatedToRole: string
+  ): void {
+    this.gateEscalationsTotal
+      .labels({ project, workflow, gate, escalated_to_role: escalatedToRole })
+      .inc();
   }
 
   /** Get metrics in Prometheus text format. */

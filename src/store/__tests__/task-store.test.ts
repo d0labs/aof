@@ -155,6 +155,22 @@ describe("TaskStore", () => {
     await expect(store.transition(id, "backlog")).rejects.toThrow("Invalid transition");
   });
 
+  it("makes transition idempotent (no error on same status)", async () => {
+    const task = await store.create({ title: "Idempotent test", createdBy: "main" });
+    const id = task.frontmatter.id;
+
+    // Transition to ready
+    await store.transition(id, "ready");
+
+    // Transition to ready again (should be no-op, no error)
+    const result = await store.transition(id, "ready");
+    expect(result.frontmatter.status).toBe("ready");
+
+    // Verify task is still accessible
+    const loaded = await store.get(id);
+    expect(loaded?.frontmatter.status).toBe("ready");
+  });
+
   it("updates body and recalculates hash", async () => {
     const task = await store.create({ title: "Hash test", body: "v1", createdBy: "main" });
     const hash1 = task.frontmatter.contentHash;

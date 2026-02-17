@@ -1,18 +1,18 @@
 {
   "name": "aof",
   "version": "0.1.0",
-  "description": "Agentic Ops Fabric — deterministic orchestration for multi-agent systems",
+  "description": "Agentic Ops Fabric \u2014 deterministic orchestration for multi-agent systems",
   "type": "module",
   "engines": {
     "node": ">=22.0.0"
   },
-  "main": "dist/index.js",
+  "main": "dist/plugin.js",
   "bin": {
     "aof": "dist/cli/index.js",
     "aof-daemon": "dist/daemon/index.js"
   },
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && node scripts/copy-extension-entry.js",
     "dev": "tsc --watch",
     "start": "node dist/cli/index.js",
     "deploy:plugin": "scripts/deploy-plugin.sh",
@@ -50,5 +50,43 @@
     "@types/node": "^22.0.0",
     "typescript": "^5.7.0",
     "vitest": "^3.0.0"
+  },
+  "openclaw": {
+    "id": "aof",
+    "name": "AOF \u2014 Agentic Ops Fabric",
+    "description": "Deterministic task orchestration for multi-agent systems",
+    "configSchema": {
+      "type": "object",
+      "properties": {
+        "dryRun": {
+          "type": "boolean",
+          "default": true
+        },
+        "dataDir": {
+          "type": "string"
+        },
+        "gatewayUrl": {
+          "type": "string"
+        },
+        "gatewayToken": {
+          "type": "string"
+        },
+        "pollIntervalMs": {
+          "type": "number"
+        },
+        "defaultLeaseTtlMs": {
+          "type": "number"
+        },
+        "heartbeatTtlMs": {
+          "type": "number"
+        },
+        "maxConcurrentDispatches": {
+          "type": "number",
+          "minimum": 1,
+          "maximum": 50
+        }
+      },
+      "additionalProperties": false
+    }
   }
 }

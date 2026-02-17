@@ -62,7 +62,7 @@ describe("OpenClawExecutor", () => {
     const result = await executor.spawn(context);
 
     expect(result.success).toBe(false);
-    expect(result.error).toBe("Agent not found");
+    expect(result.error).toContain("Agent not found");
     expect(result.sessionId).toBeUndefined();
   });
 
@@ -140,5 +140,95 @@ describe("OpenClawExecutor", () => {
 
     expect(result.success).toBe(false);
     expect(result.error).toContain("Network error");
+  });
+
+  it("includes aof_task_complete instruction with taskId", async () => {
+    (mockApi.spawnAgent as ReturnType<typeof vi.fn>).mockResolvedValue({
+      success: true,
+      sessionId: "session-complete-instruction",
+    });
+
+    const context: TaskContext = {
+      taskId: "TASK-006",
+      taskPath: "/path/to/task.md",
+      agent: "swe-backend",
+      priority: "normal",
+      routing: {},
+    };
+
+    await executor.spawn(context);
+
+    expect(mockApi.spawnAgent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        task: expect.stringContaining("aof_task_complete"),
+      }),
+    );
+    expect(mockApi.spawnAgent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        task: expect.stringContaining('taskId="TASK-006"'),
+      }),
+    );
+  });
+
+  it("normalizes agent ID by trying multiple formats", async () => {
+    // First call fails, second succeeds
+    (mockApi.spawnAgent as ReturnType<typeof vi.fn>)
+      .mockResolvedValueOnce({
+        success: false,
+        error: "Agent not found",
+      })
+      .mockResolvedValueOnce({
+        success: true,
+        sessionId: "session-normalized",
+      });
+
+    const context: TaskContext = {
+      taskId: "TASK-007",
+      taskPath: "/path/to/task.md",
+      agent: "swe-backend",
+      priority: "normal",
+      routing: {},
+    };
+
+    const result = await executor.spawn(context);
+
+    expect(result.success).toBe(true);
+    expect(result.sessionId).toBe("session-normalized");
+    expect(mockApi.spawnAgent).toHaveBeenCalledTimes(2);
+    
+    // First call with raw agent ID
+    expect(mockApi.spawnAgent).toHaveBeenNthCalledWith(1,
+      expect.objectContaining({
+        agentId: "swe-backend",
+      }),
+    );
+    
+    // Second call with normalized agent ID
+    expect(mockApi.spawnAgent).toHaveBeenNthCalledWith(2,
+      expect.objectContaining({
+        agentId: "agent:swe-backend:main",
+      }),
+    );
+  });
+
+  it("handles graceful fallback when agent not found in any format", async () => {
+    (mockApi.spawnAgent as ReturnType<typeof vi.fn>).mockResolvedValue({
+      success: false,
+      error: "Agent not found",
+    });
+
+    const context: TaskContext = {
+      taskId: "TASK-008",
+      taskPath: "/path/to/task.md",
+      agent: "nonexistent-agent",
+      priority: "normal",
+      routing: {},
+    };
+
+    const result = await executor.spawn(context);
+
+    expect(result.success).toBe(false);
+    expect(result.error).toContain("Agent not found");
+    expect(mockApi.spawnAgent).toHaveBeenCalledTimes(2); // Tried both formats
   });
 });

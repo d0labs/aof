@@ -17,6 +17,7 @@ export interface AOFPluginOptions {
   dryRun?: boolean;
   gatewayUrl?: string;
   gatewayToken?: string;
+  maxConcurrentDispatches?: number;
   store?: TaskStore;
   logger?: EventLogger;
   metrics?: AOFMetrics;
@@ -56,6 +57,7 @@ export function registerAofPlugin(api: OpenClawApi, opts: AOFPluginOptions): AOF
         dryRun: opts.dryRun ?? true,
         pollIntervalMs: opts.pollIntervalMs,
         defaultLeaseTtlMs: opts.defaultLeaseTtlMs,
+        maxConcurrentDispatches: opts.maxConcurrentDispatches,
       },
     );
 
@@ -126,7 +128,7 @@ export function registerAofPlugin(api: OpenClawApi, opts: AOFPluginOptions): AOF
       const result = await aofDispatch({ store, logger }, params as any);
       return wrapResult(result);
     },
-  }, { optional: true });
+  });
 
   api.registerTool({
     name: "aof_task_update",
@@ -146,7 +148,7 @@ export function registerAofPlugin(api: OpenClawApi, opts: AOFPluginOptions): AOF
       const result = await aofTaskUpdate({ store, logger }, params as any);
       return wrapResult(result);
     },
-  }, { optional: true });
+  });
 
   api.registerTool({
     name: "aof_status_report",
@@ -163,17 +165,97 @@ export function registerAofPlugin(api: OpenClawApi, opts: AOFPluginOptions): AOF
       const result = await aofStatusReport({ store, logger }, params as any);
       return wrapResult(result);
     },
-  }, { optional: true });
+  });
 
   api.registerTool({
     name: "aof_task_complete",
-    description: "Mark an AOF task done and append a completion summary (and outputs) to the task card.",
+    description: `Mark your current task as done.
+
+**When to use:**
+- You've finished your work and it's ready for the next step: set outcome to "complete"
+- You found problems that need someone else to fix: set outcome to "needs_review" and list blockers
+- You can't proceed due to external blockers: set outcome to "blocked" and explain why
+
+**Parameters:**
+- outcome (optional): "complete" | "needs_review" | "blocked"
+  - "complete": Your work is done and ready to advance (default if omitted)
+  - "needs_review": Work needs fixes - include specific blockers
+  - "blocked": Can't proceed - external dependency or blocker
+  
+- summary (optional): Brief description of what you did (1-2 sentences)
+
+- blockers (optional, array of strings): Specific issues that need fixing
+  - Required if outcome is "needs_review" or "blocked"
+  - Each blocker should be actionable (not vague)
+  - Examples: "Missing error handling for expired tokens", "Test coverage at 65%, need 80%"
+  
+- rejectionNotes (optional, string): Additional context for the person fixing issues
+  - Only relevant for "needs_review" outcome
+  - Keep it constructive and specific
+
+**Examples:**
+
+Complete (implicit):
+{
+  "taskId": "AOF-abc",
+  "summary": "Implemented JWT middleware with tests, 85% coverage"
+}
+
+Complete (explicit):
+{
+  "taskId": "AOF-abc",
+  "outcome": "complete",
+  "summary": "Implemented JWT middleware with tests, 85% coverage"
+}
+
+Needs Review (reviewer rejecting work):
+{
+  "taskId": "AOF-abc",
+  "outcome": "needs_review",
+  "summary": "Implementation needs revision before advancing",
+  "blockers": [
+    "Missing error handling for expired tokens",
+    "Test coverage at 65%, target is 80%"
+  ],
+  "rejectionNotes": "Please address these issues and resubmit"
+}
+
+Blocked (can't proceed):
+{
+  "taskId": "AOF-abc",
+  "outcome": "blocked",
+  "summary": "Waiting for API spec from external team",
+  "blockers": ["Need finalized API spec from platform team"]
+}`,
     parameters: {
       type: "object",
       properties: {
-        taskId: { type: "string", description: "Task ID to complete" },
-        summary: { type: "string", description: "Completion summary" },
-        actor: { type: "string", description: "Agent marking task complete" },
+        taskId: { 
+          type: "string", 
+          description: "Task ID to complete" 
+        },
+        outcome: {
+          type: "string",
+          enum: ["complete", "needs_review", "blocked"],
+          description: "Result of your work (default: complete)",
+        },
+        summary: { 
+          type: "string", 
+          description: "What you did (optional but recommended)" 
+        },
+        blockers: {
+          type: "array",
+          items: { type: "string" },
+          description: "Specific issues (required for needs_review/blocked)",
+        },
+        rejectionNotes: {
+          type: "string",
+          description: "Additional context for needs_review",
+        },
+        actor: { 
+          type: "string", 
+          description: "Agent ID (usually auto-populated)" 
+        },
       },
       required: ["taskId"],
     },
@@ -181,7 +263,7 @@ export function registerAofPlugin(api: OpenClawApi, opts: AOFPluginOptions): AOF
       const result = await aofTaskComplete({ store, logger }, params as any);
       return wrapResult(result);
     },
-  }, { optional: true });
+  });
 
   // --- HTTP routes (use registerHttpRoute for path-based endpoints) ---
   if (typeof api.registerHttpRoute === "function") {

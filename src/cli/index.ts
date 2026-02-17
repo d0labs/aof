@@ -28,6 +28,7 @@ import { init } from "./init.js";
 import { integrateWithOpenClaw, detectOpenClawConfig } from "../packaging/integration.js";
 import { ejectFromOpenClaw, detectOpenClawIntegration } from "../packaging/ejector.js";
 import { migrateToProjects, rollbackMigration } from "../projects/migration.js";
+import { daemonStart, daemonStop, daemonStatus, daemonRestart } from "./commands/daemon.js";
 
 const AOF_ROOT = process.env["AOF_ROOT"] ?? resolve(homedir(), "Projects", "AOF");
 
@@ -245,6 +246,56 @@ eject
     console.log("   3. To re-integrate: aof integrate openclaw");
   });
 
+// --- daemon ---
+const daemon = program
+  .command("daemon")
+  .description("Daemon management commands");
+
+daemon
+  .command("start")
+  .description("Start the AOF daemon in background")
+  .option("--port <number>", "HTTP port", "18000")
+  .option("--bind <address>", "Bind address", "127.0.0.1")
+  .option("--data-dir <path>", "Data directory")
+  .option("--log-level <level>", "Log level", "info")
+  .action(async (opts: { port: string; bind: string; dataDir?: string; logLevel: string }) => {
+    const root = program.opts()["root"] as string;
+    const dataDir = opts.dataDir ?? root;
+    await daemonStart(dataDir, opts);
+  });
+
+daemon
+  .command("stop")
+  .description("Stop the running daemon")
+  .option("--timeout <seconds>", "Shutdown timeout in seconds", "10")
+  .action(async (opts: { timeout: string }) => {
+    const root = program.opts()["root"] as string;
+    await daemonStop(root, opts);
+  });
+
+daemon
+  .command("status")
+  .description("Check daemon status")
+  .option("--port <number>", "HTTP port (for health endpoint display)", "18000")
+  .option("--bind <address>", "Bind address (for health endpoint display)", "127.0.0.1")
+  .action(async (opts: { port: string; bind: string }) => {
+    const root = program.opts()["root"] as string;
+    await daemonStatus(root, opts.port, opts.bind);
+  });
+
+daemon
+  .command("restart")
+  .description("Restart the daemon")
+  .option("--port <number>", "HTTP port", "18000")
+  .option("--bind <address>", "Bind address", "127.0.0.1")
+  .option("--data-dir <path>", "Data directory")
+  .option("--log-level <level>", "Log level", "info")
+  .action(async (opts: { port: string; bind: string; dataDir?: string; logLevel: string }) => {
+    const root = program.opts()["root"] as string;
+    const dataDir = opts.dataDir ?? root;
+    await daemonRestart(dataDir, opts);
+  });
+
 // --- lint ---
 program
   .command("lint")
@@ -405,6 +456,47 @@ task
   .action(async (opts: { project: string }) => {
     // Delegate to scan with project option
     await program.commands.find(c => c.name() === "scan")?.parseAsync(["--project", opts.project], { from: "user" });
+  });
+
+task
+  .command("resurrect <task-id>")
+  .description("Resurrect a task from deadletter status back to ready")
+  .option("--project <id>", "Project ID", "_inbox")
+  .action(async (taskId: string, opts: { project: string }) => {
+    const { createProjectStore } = await import("./project-utils.js");
+    const { resurrectTask } = await import("./task-resurrect.js");
+    const root = program.opts()["root"] as string;
+    const { store, projectRoot } = await createProjectStore({ projectId: opts.project, vaultRoot: root });
+    await store.init();
+
+    // Create event logger for the project
+    const eventLogger = new EventLogger(join(projectRoot, "events"));
+
+    try {
+      await resurrectTask(store, eventLogger, taskId, "cli");
+      console.log(`✅ Task ${taskId} resurrected (deadletter → ready)`);
+      console.log(`   Ready for re-dispatch on next scheduler poll.`);
+    } catch (error) {
+      console.error(`❌ ${(error as Error).message}`);
+      process.exitCode = 1;
+    }
+  });
+
+task
+  .command("promote <task-id>")
+  .description("Promote task from backlog to ready")
+  .option("--force", "Bypass eligibility checks", false)
+  .option("--project <id>", "Project ID", "_inbox")
+  .action(async (taskId: string, opts: { force: boolean; project: string }) => {
+    const { createProjectStore } = await import("./project-utils.js");
+    const { taskPromote } = await import("./commands/task-promote.js");
+    const root = program.opts()["root"] as string;
+    const { store, projectRoot } = await createProjectStore({ projectId: opts.project, vaultRoot: root });
+    await store.init();
+
+    const eventLogger = new EventLogger(join(projectRoot, "events"));
+
+    await taskPromote(store, eventLogger, taskId, { force: opts.force });
   });
 
 // --- org ---
@@ -855,7 +947,13 @@ memory
     const orgPath = opts.org ?? join(root, "org", "org-chart.yaml");
     let orgChart: import("../schemas/org-chart.js").OrgChart | undefined;
     try {
-      orgChart = await loadOrgChart(orgPath);
+      const result = await loadOrgChart(orgPath);
+      if (result.success) {
+        orgChart = result.chart;
+      } else {
+        console.error(`⚠️  Could not load org chart: validation failed`);
+        console.error("   Continuing without org chart reference...");
+      }
     } catch (error) {
       console.error(`⚠️  Could not load org chart: ${(error as Error).message}`);
       console.error("   Continuing without org chart reference...");

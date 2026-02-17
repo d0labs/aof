@@ -255,6 +255,23 @@ export const MemoryCuration = z.object({
 });
 export type MemoryCuration = z.infer<typeof MemoryCuration>;
 
+/**
+ * Role mapping for workflow gates — maps abstract roles to concrete agents.
+ *
+ * This enables workflow definitions to reference roles (e.g., "backend", "qa")
+ * instead of hardcoding agent IDs. Agents can be rotated or load-balanced
+ * without changing workflow definitions.
+ */
+export const RoleMapping = z.object({
+  /** List of agents that can fulfill this role (at least one required). */
+  agents: z.array(z.string()).min(1),
+  /** Human-readable description of this role's responsibilities. */
+  description: z.string().optional(),
+  /** Whether this role requires human involvement (D3: human-only gates). */
+  requireHuman: z.boolean().optional(),
+});
+export type RoleMapping = z.infer<typeof RoleMapping>;
+
 /** Top-level org chart document. */
 export const OrgChart = z.object({
   schemaVersion: z.literal(1),
@@ -274,6 +291,8 @@ export const OrgChart = z.object({
   memoryPools: MemoryPools.optional(),
   /** Memory curation configuration (optional). */
   memoryCuration: MemoryCuration.optional(),
+  /** Role-based agent mapping for workflow gates. */
+  roles: z.record(z.string(), RoleMapping).optional(),
   /** Legacy: teams (use orgUnits for P1.1+). */
   teams: z.array(OrgTeam).default([]),
   /** Agents. */
@@ -284,3 +303,32 @@ export const OrgChart = z.object({
   metadata: z.record(z.string(), z.unknown()).default({}),
 });
 export type OrgChart = z.infer<typeof OrgChart>;
+
+/**
+ * Validate that all roles referenced in a workflow exist in the org chart.
+ *
+ * This ensures workflow gate definitions reference valid roles defined in
+ * the org chart, preventing runtime errors when dispatching tasks.
+ *
+ * @param workflow - Workflow config with gates
+ * @param orgChart - Org chart with role mappings
+ * @returns Array of validation errors (empty if valid)
+ */
+export function validateWorkflowRoles(
+  workflow: { gates: Array<{ role: string; escalateTo?: string }> },
+  orgChart: { roles?: Record<string, RoleMapping> }
+): string[] {
+  const errors: string[] = [];
+  const roles = orgChart.roles ?? {};
+
+  for (const gate of workflow.gates) {
+    if (!roles[gate.role]) {
+      errors.push(`Gate references undefined role: ${gate.role}`);
+    }
+    if (gate.escalateTo && !roles[gate.escalateTo]) {
+      errors.push(`Gate escalateTo references undefined role: ${gate.escalateTo}`);
+    }
+  }
+
+  return errors;
+}

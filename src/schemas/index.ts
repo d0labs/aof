@@ -6,6 +6,7 @@ export {
   TaskStatus,
   TaskPriority,
   TaskLease,
+  GateState,
   TaskRouting,
   TaskFrontmatter,
   Task,
@@ -24,6 +25,8 @@ export {
   OrgTeam,
   RoutingRule,
   OrgChart,
+  RoleMapping,
+  validateWorkflowRoles,
 } from "./org-chart.js";
 
 export {
@@ -87,6 +90,21 @@ export {
   ProjectLinks,
   ProjectManifest,
 } from "./project.js";
+
+export {
+  GateOutcome,
+  Gate,
+  GateHistoryEntry,
+  ReviewContext,
+  GateTransition,
+  TestSpec,
+} from "./gate.js";
+
+export {
+  RejectionStrategy,
+  WorkflowConfig,
+  validateWorkflow,
+} from "./workflow.js";
 
 export type { Runbook } from "./runbook.js";
 export type { DeliverableSection, RunbookComplianceResult } from "./deliverable.js";

@@ -3,7 +3,7 @@
   "name": "AOF — Agentic Ops Fabric",
   "version": "0.1.0",
   "description": "Deterministic task orchestration layer for multi-agent systems. Provides filesystem-first kanban, context-aware dispatch, org chart governance, and real-time views.",
-  "main": "plugin.js",
+  "main": "dist/plugin.js",
   "configSchema": {
     "type": "object",
     "additionalProperties": false,
@@ -31,6 +31,16 @@
       "gatewayToken": {
         "type": "string",
         "description": "OpenClaw gateway authentication token"
+      },
+      "heartbeatTtlMs": {
+        "type": "number",
+        "description": "Heartbeat TTL in milliseconds (default: 300000)"
+      },
+      "maxConcurrentDispatches": {
+        "type": "number",
+        "minimum": 1,
+        "maximum": 50,
+        "description": "Maximum concurrent dispatched tasks (default: 3)"
       }
     }
   }

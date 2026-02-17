@@ -131,4 +131,57 @@ describe("AOFMetrics", () => {
 
     expect(output).toContain('aof_context_budget_status{taskId="TEST-001",status="ok"} 2');
   });
+
+  describe("Gate Telemetry", () => {
+    it("records gate duration histogram", async () => {
+      metrics.recordGateDuration("my-project", "standard", "implement", "complete", 3600);
+      metrics.recordGateDuration("my-project", "standard", "review", "complete", 1800);
+      const output = await metrics.getMetrics();
+
+      expect(output).toContain('aof_gate_duration_seconds_count{project="my-project",workflow="standard",gate="implement",outcome="complete"} 1');
+      expect(output).toContain('aof_gate_duration_seconds_count{project="my-project",workflow="standard",gate="review",outcome="complete"} 1');
+      expect(output).toContain('aof_gate_duration_seconds_sum{project="my-project",workflow="standard",gate="implement",outcome="complete"} 3600');
+      expect(output).toContain('aof_gate_duration_seconds_sum{project="my-project",workflow="standard",gate="review",outcome="complete"} 1800');
+    });
+
+    it("records gate transitions", async () => {
+      metrics.recordGateTransition("my-project", "standard", "implement", "review", "complete");
+      metrics.recordGateTransition("my-project", "standard", "review", "verify", "complete");
+      const output = await metrics.getMetrics();
+
+      expect(output).toContain('aof_gate_transitions_total{project="my-project",workflow="standard",from_gate="implement",to_gate="review"');
+      expect(output).toContain('aof_gate_transitions_total{project="my-project",workflow="standard",from_gate="review",to_gate="verify"');
+    });
+
+    it("records gate rejections", async () => {
+      metrics.recordGateRejection("my-project", "standard", "review", "swe-qa");
+      metrics.recordGateRejection("my-project", "standard", "review", "swe-qa");
+      const output = await metrics.getMetrics();
+
+      expect(output).toContain('aof_gate_rejections_total{project="my-project",workflow="standard",gate="review",rejected_by_role="swe-qa"} 2');
+    });
+
+    it("records gate timeouts", async () => {
+      metrics.recordGateTimeout("my-project", "standard", "implement");
+      const output = await metrics.getMetrics();
+
+      expect(output).toContain('aof_gate_timeouts_total{project="my-project",workflow="standard",gate="implement"} 1');
+    });
+
+    it("records gate escalations", async () => {
+      metrics.recordGateEscalation("my-project", "standard", "implement", "swe-architect");
+      const output = await metrics.getMetrics();
+
+      expect(output).toContain('aof_gate_escalations_total{project="my-project",workflow="standard",gate="implement",escalated_to_role="swe-architect"} 1');
+    });
+
+    it("tracks multiple gates and workflows", async () => {
+      metrics.recordGateDuration("proj-a", "standard", "implement", "complete", 1000);
+      metrics.recordGateDuration("proj-b", "fast-track", "review", "complete", 500);
+      const output = await metrics.getMetrics();
+
+      expect(output).toContain('project="proj-a",workflow="standard",gate="implement"');
+      expect(output).toContain('project="proj-b",workflow="fast-track",gate="review"');
+    });
+  });
 });

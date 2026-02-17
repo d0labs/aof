@@ -179,6 +179,36 @@ describe("Scheduler", () => {
     expect(updated?.frontmatter.lease?.agent).toBe("swe-backend");
   });
 
+  it("renews leases while dispatched sessions are active", async () => {
+    const executor = new MockExecutor();
+    const activeConfig = {
+      ...config,
+      dryRun: false,
+      executor,
+      defaultLeaseTtlMs: 200,
+    };
+
+    const task = await store.create({
+      title: "Lease renewal task",
+      createdBy: "main",
+      routing: { agent: "swe-backend" },
+    });
+    await store.transition(task.frontmatter.id, "ready");
+
+    await poll(store, logger, activeConfig);
+
+    let updated = await store.get(task.frontmatter.id);
+    expect(updated?.frontmatter.lease?.renewCount).toBe(0);
+
+    await new Promise((resolve) => setTimeout(resolve, 250));
+
+    updated = await store.get(task.frontmatter.id);
+    expect(updated?.frontmatter.lease?.renewCount).toBeGreaterThanOrEqual(1);
+
+    await store.transition(task.frontmatter.id, "ready");
+    await new Promise((resolve) => setTimeout(resolve, 250));
+  });
+
   it("moves task to blocked on spawn failure", async () => {
     const executor = new MockExecutor();
     executor.setShouldFail(true, "Agent unavailable");
@@ -436,6 +466,9 @@ describe("Scheduler", () => {
       expect(executor.spawned.length).toBe(1);
       expect(executor.spawned[0]?.context.taskId).toBe(task.frontmatter.id);
       expect(executor.spawned[0]?.context.agent).toBe("swe-qa");
+      expect(executor.spawned[0]?.context.taskPath).toBe(
+        join(store.tasksDir, "in-progress", `${task.frontmatter.id}.md`),
+      );
 
       // 8. Verify event log contains all expected events
       const { readdir, readFile } = await import("node:fs/promises");
@@ -661,6 +694,160 @@ describe("Scheduler", () => {
       const pollEvent = events.find(e => e.type === "scheduler.poll");
 
       expect(pollEvent.payload.actionsExecuted).toBe(1);
+    });
+  });
+
+  describe("concurrency controls (maxConcurrentDispatches)", () => {
+    it("defaults to 3 concurrent dispatches when not configured", async () => {
+      // Create 5 ready tasks
+      for (let i = 1; i <= 5; i++) {
+        const task = await store.create({
+          title: `Task ${i}`,
+          createdBy: "main",
+          routing: { agent: "swe-backend" },
+        });
+        await store.transition(task.frontmatter.id, "ready");
+      }
+
+      const result = await poll(store, logger, config);
+
+      // Should plan at most 3 assign actions (default cap)
+      const assignActions = result.actions.filter(a => a.type === "assign");
+      expect(assignActions.length).toBe(3);
+    });
+
+    it("respects custom maxConcurrentDispatches limit", async () => {
+      const customConfig = {
+        ...config,
+        maxConcurrentDispatches: 2,
+      };
+
+      // Create 5 ready tasks
+      for (let i = 1; i <= 5; i++) {
+        const task = await store.create({
+          title: `Task ${i}`,
+          createdBy: "main",
+          routing: { agent: "swe-backend" },
+        });
+        await store.transition(task.frontmatter.id, "ready");
+      }
+
+      const result = await poll(store, logger, customConfig);
+
+      // Should plan at most 2 assign actions
+      const assignActions = result.actions.filter(a => a.type === "assign");
+      expect(assignActions.length).toBe(2);
+    });
+
+    it("skips assign when at capacity (in-progress tasks)", async () => {
+      const customConfig = {
+        ...config,
+        maxConcurrentDispatches: 2,
+      };
+
+      // Create 2 in-progress tasks
+      for (let i = 1; i <= 2; i++) {
+        const task = await store.create({
+          title: `In Progress ${i}`,
+          createdBy: "main",
+          routing: { agent: "swe-backend" },
+        });
+        await store.transition(task.frontmatter.id, "ready");
+        await acquireLease(store, task.frontmatter.id, "swe-backend");
+      }
+
+      // Create 1 ready task
+      const readyTask = await store.create({
+        title: "Ready Task",
+        createdBy: "main",
+        routing: { agent: "swe-backend" },
+      });
+      await store.transition(readyTask.frontmatter.id, "ready");
+
+      const result = await poll(store, logger, customConfig);
+
+      // Should not plan any assign actions (already at capacity: 2/2)
+      const assignActions = result.actions.filter(a => a.type === "assign");
+      expect(assignActions.length).toBe(0);
+      expect(result.stats.inProgress).toBe(2);
+    });
+
+    it("allows partial assignments when below capacity", async () => {
+      const customConfig = {
+        ...config,
+        maxConcurrentDispatches: 3,
+      };
+
+      // Create 1 in-progress task
+      const inProgressTask = await store.create({
+        title: "In Progress",
+        createdBy: "main",
+        routing: { agent: "swe-backend" },
+      });
+      await store.transition(inProgressTask.frontmatter.id, "ready");
+      await acquireLease(store, inProgressTask.frontmatter.id, "swe-backend");
+
+      // Create 5 ready tasks
+      for (let i = 1; i <= 5; i++) {
+        const task = await store.create({
+          title: `Ready ${i}`,
+          createdBy: "main",
+          routing: { agent: "swe-backend" },
+        });
+        await store.transition(task.frontmatter.id, "ready");
+      }
+
+      const result = await poll(store, logger, customConfig);
+
+      // Should plan 2 assign actions (1 in-progress + 2 pending = 3 total)
+      const assignActions = result.actions.filter(a => a.type === "assign");
+      expect(assignActions.length).toBe(2);
+      expect(result.stats.inProgress).toBe(1);
+    });
+
+    it("does not double-count pending assignments in same poll", async () => {
+      const customConfig = {
+        ...config,
+        maxConcurrentDispatches: 5,
+      };
+
+      // Create 10 ready tasks
+      for (let i = 1; i <= 10; i++) {
+        const task = await store.create({
+          title: `Task ${i}`,
+          createdBy: "main",
+          routing: { agent: "swe-backend" },
+        });
+        await store.transition(task.frontmatter.id, "ready");
+      }
+
+      const result = await poll(store, logger, customConfig);
+
+      // Should plan exactly 5 assign actions (cap), not more
+      const assignActions = result.actions.filter(a => a.type === "assign");
+      expect(assignActions.length).toBe(5);
+    });
+
+    it("allows zero in-progress if all slots available", async () => {
+      const customConfig = {
+        ...config,
+        maxConcurrentDispatches: 1,
+      };
+
+      // Create 1 ready task
+      const task = await store.create({
+        title: "Single Task",
+        createdBy: "main",
+        routing: { agent: "swe-backend" },
+      });
+      await store.transition(task.frontmatter.id, "ready");
+
+      const result = await poll(store, logger, customConfig);
+
+      // Should plan 1 assign action
+      const assignActions = result.actions.filter(a => a.type === "assign");
+      expect(assignActions.length).toBe(1);
+      expect(result.stats.inProgress).toBe(0);
     });
   });
 });

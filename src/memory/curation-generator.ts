@@ -275,6 +275,8 @@ export async function generateCurationTasks(
           lastTransitionAt: now.toISOString(),
           createdBy: "curation-generator",
           dependsOn: [],
+          gateHistory: [],
+          tests: [],
           metadata: {
             type: "curation",
             backend,

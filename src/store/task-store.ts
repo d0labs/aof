@@ -27,6 +27,7 @@ const STATUS_DIRS: readonly TaskStatus[] = [
   "blocked",
   "review",
   "done",
+  "deadletter",
 ] as const;
 
 export interface TaskStoreHooks {
@@ -211,11 +212,13 @@ export class TaskStore {
   }
 
   /** Create a new task. Returns the created Task. */
+  /** Create a new task. Returns the created Task. */
   async create(opts: {
     title: string;
     body?: string;
     priority?: string;
     routing?: { role?: string; team?: string; agent?: string; tags?: string[] };
+    sla?: { maxInProgressMs?: number; onViolation?: "alert" | "block" | "deadletter" };
     metadata?: Record<string, unknown>;
     createdBy: string;
     parentId?: string;
@@ -240,6 +243,7 @@ export class TaskStore {
         agent: opts.routing?.agent,
         tags: opts.routing?.tags ?? [],
       },
+      sla: opts.sla,
       createdAt: nowIso,
       updatedAt: nowIso,
       lastTransitionAt: nowIso,
@@ -354,6 +358,30 @@ export class TaskStore {
   }
 
   /**
+   * Count tasks by status.
+   * Returns a map of status -> count.
+   */
+  async countByStatus(): Promise<Record<string, number>> {
+    const counts: Record<string, number> = {};
+
+    for (const status of STATUS_DIRS) {
+      const dir = this.statusDir(status);
+      let entries: string[];
+      try {
+        entries = await readdir(dir);
+      } catch {
+        counts[status] = 0;
+        continue;
+      }
+
+      const taskFiles = entries.filter((entry) => entry.endsWith(".md"));
+      counts[status] = taskFiles.length;
+    }
+
+    return counts;
+  }
+
+  /**
    * Transition a task to a new status.
    * This is the core operation: atomic rename between status directories.
    */
@@ -368,6 +396,12 @@ export class TaskStore {
     }
 
     const currentStatus = task.frontmatter.status;
+
+    // Idempotent: if already in target state, return early (no-op)
+    if (currentStatus === newStatus) {
+      return task;
+    }
+
     if (!isValidTransition(currentStatus, newStatus)) {
       throw new Error(
         `Invalid transition: ${currentStatus} → ${newStatus} for task ${id}`,

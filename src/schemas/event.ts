@@ -23,6 +23,8 @@ export const EventType = z.enum([
   "task.failed",
   "task.cancelled",
   "task.validation.failed",
+  "task.deadletter",
+  "task.resurrected",
 
   // Project management
   "project.validation.failed",
@@ -38,6 +40,11 @@ export const EventType = z.enum([
   "dispatch.no-match",
   "dispatch.fallback",
   "dispatch.error",
+  
+  // Gate workflow
+  "gate_transition",
+  "gate_timeout",
+  "gate_timeout_escalation",
 
   // Delegation
   "delegation.requested",
@@ -67,8 +74,17 @@ export const EventType = z.enum([
   "system.drift-detected",
   "system.recovery",
 
+  // Recovery
+  "recovery_action",
+
+  // SLA
+  "sla.violation",
+
   // Scheduler
   "scheduler.poll",
+
+  // Concurrency
+  "concurrency.platformLimit",
 
   // Protocol
   "protocol.message.received",

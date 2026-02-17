@@ -7,9 +7,10 @@
  */
 
 import { z } from "zod";
+import { GateHistoryEntry, ReviewContext, TestSpec } from "./gate.js";
 
 /** Task ID format: TASK-YYYY-MM-DD-NNN. */
-export const TaskId = z.string().regex(/^TASK-\d{4}-\d{2}-\d{2}-\d{3}$/, "Invalid task id");
+export const TaskId = z.string().regex(/^TASK-\d{4}-\d{2}-\d{2}-\d{3}(-\d{2})?$/, "Invalid task id");
 export type TaskId = z.infer<typeof TaskId>;
 
 /** Valid task statuses per BRD — shared across all schemas. */
@@ -20,6 +21,7 @@ export const TaskStatus = z.enum([
   "blocked",      // Waiting on external dependency
   "review",       // Work complete, awaiting review
   "done",         // Successfully completed
+  "deadletter",   // Failed dispatch 3 times, requires manual intervention
 ]);
 export type TaskStatus = z.infer<typeof TaskStatus>;
 
@@ -41,6 +43,15 @@ export const TaskLease = z.object({
 });
 export type TaskLease = z.infer<typeof TaskLease>;
 
+/** Gate state — tracks current gate and entry timestamp for workflow progression. */
+export const GateState = z.object({
+  /** Current gate ID (e.g., "dev", "qa", "deploy"). */
+  current: z.string().min(1),
+  /** ISO-8601 timestamp when task entered this gate. */
+  entered: z.string().datetime(),
+});
+export type GateState = z.infer<typeof GateState>;
+
 /** Routing hints for the deterministic dispatcher. */
 export const TaskRouting = z.object({
   /** Target role from org chart (e.g., "swe-backend", "qa"). */
@@ -51,8 +62,19 @@ export const TaskRouting = z.object({
   agent: z.string().optional(),
   /** Tags for capability-based matching. */
   tags: z.array(z.string()).default([]),
+  /** Workflow name from project.yaml (e.g., "standard-sdlc"). */
+  workflow: z.string().optional(),
 });
 export type TaskRouting = z.infer<typeof TaskRouting>;
+
+/** SLA (Service Level Agreement) configuration for task execution time limits. */
+export const TaskSLA = z.object({
+  /** Maximum in-progress duration in milliseconds (per-task override). */
+  maxInProgressMs: z.number().int().positive().optional(),
+  /** Action to take on SLA violation. Phase 1: only 'alert' is supported. */
+  onViolation: z.enum(["alert", "block", "deadletter"]).optional(),
+});
+export type TaskSLA = z.infer<typeof TaskSLA>;
 
 /** Task frontmatter schema (YAML section of the Markdown file). */
 export const TaskFrontmatter = z.preprocess((input) => {
@@ -73,6 +95,7 @@ export const TaskFrontmatter = z.preprocess((input) => {
   status: TaskStatus,
   priority: TaskPriority.default("normal"),
   routing: TaskRouting.default({}),
+  sla: TaskSLA.optional().describe("SLA configuration (time limits and violation policy)"),
   lease: TaskLease.optional().describe("Present when status is assigned/in-progress"),
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime(),
@@ -86,6 +109,13 @@ export const TaskFrontmatter = z.preprocess((input) => {
   instructionsRef: z.string().min(1).optional().describe("Path to instructions file (optional)"),
   guidanceRef: z.string().min(1).optional().describe("Path to guidance/conventions file (optional)"),
   resource: z.string().optional().describe("Resource identifier for serialization (e.g., workspace path). Only one task per resource can be in-progress at a time."),
+  
+  // Gate workflow fields (optional for backward compatibility)
+  gate: GateState.optional().describe("Current gate and entry timestamp"),
+  gateHistory: z.array(GateHistoryEntry).default([]).describe("Audit trail of gate transitions"),
+  reviewContext: ReviewContext.optional().describe("Feedback from previous gate rejection"),
+  tests: z.array(TestSpec).default([]).describe("BDD-style test specifications"),
+  testsFile: z.string().optional().describe("Reference to external test file (e.g., tests/acceptance.yaml)"),
 }));
 export type TaskFrontmatter = z.infer<typeof TaskFrontmatter>;
 
@@ -105,11 +135,12 @@ export type Task = z.infer<typeof Task>;
  */
 export const VALID_TRANSITIONS: Record<TaskStatus, readonly TaskStatus[]> = {
   "backlog":     ["ready", "blocked"],
-  "ready":       ["in-progress", "blocked"],
+  "ready":       ["in-progress", "blocked", "deadletter"],
   "in-progress": ["review", "ready", "blocked"],
   "blocked":     ["ready"],
   "review":      ["done", "in-progress", "blocked"],
   "done":        [],
+  "deadletter":  ["ready"],
 } as const;
 
 /** Check if a status transition is valid. */

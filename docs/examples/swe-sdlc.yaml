@@ -1,0 +1,249 @@
+# Software Engineering SDLC Workflow
+#
+# This workflow demonstrates a production-grade software development lifecycle
+# with 9 gates, conditional routing, timeouts, escalation, and human approval.
+#
+# Key features:
+# - Multi-stage progression: implement → code review → QA → conditional gates → approval
+# - Conditional gates: security, docs, and UX reviews activate based on task tags
+# - Timeout enforcement: all gates have SLA timeouts with escalation paths
+# - Human-in-loop: final approval requires PO sign-off (no agent auto-advance)
+# - Rejection loops: any review gate can reject back to implement for fixes
+#
+# Use this workflow when:
+# - You have a mature engineering team with specialized roles
+# - Quality and compliance are critical (security audits, documentation, testing)
+# - You need observable, auditable progression through defined stages
+#
+# To use this workflow:
+# 1. Ensure your org chart defines all referenced roles
+# 2. Tag tasks appropriately to trigger conditional gates (e.g., tags: [security, api])
+# 3. Assign tasks with `routing.workflow: swe-sdlc`
+
+workflow:
+  # Unique workflow identifier
+  name: swe-sdlc
+  
+  # Rejection strategy: where do rejected tasks loop back?
+  # "origin" = always return to the first gate (implement)
+  # This ensures that any review feedback is addressed at the source
+  rejectionStrategy: origin
+  
+  # Ordered gate sequence — tasks flow through these stages
+  gates:
+    # ========================================================================
+    # GATE 1: Implementation
+    # ========================================================================
+    # Where features, fixes, and improvements are built
+    # This is the origin gate — all rejections loop back here
+    - id: implement
+      role: backend                          # Primary implementation role
+      description: "Implement feature with tests and documentation"
+      timeout: 4h                            # Escalate if stuck for 4 hours
+      escalateTo: architect                  # Senior engineer reviews blockers
+      
+      # Note: canReject is implicitly false for the first gate
+      # (there's nowhere to reject to)
+    
+    # ========================================================================
+    # GATE 2: Code Review
+    # ========================================================================
+    # Architecture and code quality review by senior engineers
+    # Checks: design patterns, maintainability, test coverage, code style
+    - id: code-review
+      role: architect                        # Senior engineer role
+      canReject: true                        # Can send back to implement
+      description: "Review architecture, code quality, and test coverage"
+      timeout: 2h                            # Reviewers must respond within 2h
+      escalateTo: tech-lead                  # Escalate to tech lead if delayed
+    
+    # ========================================================================
+    # GATE 3: QA Testing
+    # ========================================================================
+    # Functional and integration testing by QA team
+    # This gate can be skipped for trivial changes (tag: skip-qa)
+    - id: qa-test
+      role: qa                               # QA engineer role
+      canReject: true                        # Can reject if tests fail
+      description: "Functional, integration, and regression testing"
+      when: "!tags.includes('skip-qa')"      # Skip for docs-only or trivial changes
+      timeout: 3h                            # Testing SLA: 3 hours
+      escalateTo: qa-lead                    # Escalate to QA lead on timeout
+    
+    # ========================================================================
+    # GATE 4: Security Review (Conditional)
+    # ========================================================================
+    # Security audit for auth, encryption, data access, or compliance changes
+    # Only activated when task is tagged with 'security' or 'auth'
+    - id: security-review
+      role: security                         # Security engineer role
+      canReject: true                        # Can reject if vulnerabilities found
+      description: "Security audit for auth, encryption, and data access"
+      when: "tags.includes('security') || tags.includes('auth')"  # Conditional activation
+      timeout: 2h                            # Security SLA: 2 hours
+      escalateTo: security-lead              # Escalate to security lead
+    
+    # ========================================================================
+    # GATE 5: Documentation (Conditional)
+    # ========================================================================
+    # Technical documentation update for API changes, new features, or UX updates
+    # Activated when task affects public APIs or user-facing features
+    - id: docs-update
+      role: tech-writer                      # Technical writer role
+      description: "Update technical docs, API specs, and user guides"
+      when: "tags.includes('api') || tags.includes('docs') || tags.includes('ux')"
+      timeout: 2h                            # Docs SLA: 2 hours
+      escalateTo: docs-lead                  # Escalate to docs lead
+      
+      # Note: canReject not set (defaults to false)
+      # Docs gate doesn't reject — writers coordinate async via feedback
+    
+    # ========================================================================
+    # GATE 6: UX Review (Conditional)
+    # ========================================================================
+    # Design and usability review for UI changes
+    # Only activated for tasks tagged with 'ux' or 'frontend'
+    - id: ux-review
+      role: ux-designer                      # UX designer role
+      canReject: true                        # Can reject if UX guidelines violated
+      description: "Review UI/UX design, accessibility, and usability"
+      when: "tags.includes('ux') || tags.includes('frontend')"  # Conditional activation
+      timeout: 2h                            # UX review SLA: 2 hours
+      escalateTo: design-lead                # Escalate to design lead
+    
+    # ========================================================================
+    # GATE 7: Performance Testing (Conditional)
+    # ========================================================================
+    # Load testing and performance benchmarking for high-scale features
+    # Activated when task is tagged with 'performance' or 'scale'
+    - id: perf-test
+      role: sre                              # SRE or performance engineer
+      canReject: true                        # Can reject if performance degrades
+      description: "Load testing, profiling, and performance validation"
+      when: "tags.includes('performance') || tags.includes('scale')"
+      timeout: 3h                            # Performance testing SLA: 3 hours
+      escalateTo: sre-lead                   # Escalate to SRE lead
+    
+    # ========================================================================
+    # GATE 8: Deployment Prep
+    # ========================================================================
+    # Final pre-deployment checks: migrations, rollback plans, monitoring
+    # SRE ensures production readiness
+    - id: deploy-prep
+      role: sre                              # SRE or DevOps engineer
+      description: "Verify migrations, rollback plans, and monitoring setup"
+      timeout: 1h                            # Deployment prep SLA: 1 hour
+      escalateTo: ops-lead                   # Escalate to ops lead
+    
+    # ========================================================================
+    # GATE 9: Product Owner Approval (Human-Only)
+    # ========================================================================
+    # Final acceptance gate — Product Owner verifies business requirements met
+    # This gate requires human approval; agents cannot auto-advance
+    - id: po-approval
+      role: po                               # Product Owner role
+      description: "Product Owner final acceptance and business sign-off"
+      requireHuman: true                     # CRITICAL: Only humans can approve
+      timeout: 4h                            # PO approval SLA: 4 hours
+      escalateTo: director                   # Escalate to director if PO unavailable
+      
+      # Note: Even though agents can't complete this gate, timeout still applies
+      # to detect when the PO is unavailable and escalation is needed
+  
+  # Outcome semantic mappings
+  # These help agents understand what each outcome means in context
+  outcomes:
+    complete: advance                        # Proceed to next gate
+    needs_review: reject                     # Loop back to implement for fixes
+    blocked: hold                            # External blocker, stay in current gate
+
+# Example task frontmatter using this workflow:
+#
+# ---
+# id: AOF-abc
+# title: "Implement OAuth2 authentication"
+# status: in_progress
+# routing:
+#   workflow: swe-sdlc                        # Use this workflow
+#   role: backend                             # Current gate role
+# gate:
+#   current: implement                        # Starting gate
+#   entered: 2026-02-16T10:00:00Z
+# tags: [auth, security, api]                 # Triggers security-review and docs-update gates
+# ---
+
+# Example org chart snippet (org.yaml) to support this workflow:
+#
+# schemaVersion: 1
+# agents:
+#   - id: backend-1
+#     name: "Backend Engineer"
+#     active: true
+#   - id: architect-1
+#     name: "Senior Architect"
+#     active: true
+#   - id: qa-1
+#     name: "QA Engineer"
+#     active: true
+#   - id: security-1
+#     name: "Security Engineer"
+#     active: true
+#   - id: tech-writer-1
+#     name: "Technical Writer"
+#     active: true
+#   - id: ux-1
+#     name: "UX Designer"
+#     active: true
+#   - id: sre-1
+#     name: "SRE Engineer"
+#     active: true
+#   - id: po-1
+#     name: "Product Owner"
+#     active: true
+#
+# roles:
+#   backend:
+#     agents: [backend-1]
+#     description: "Backend implementation and API development"
+#   architect:
+#     agents: [architect-1]
+#     description: "Code review and architecture guidance"
+#   qa:
+#     agents: [qa-1]
+#     description: "Quality assurance and testing"
+#   security:
+#     agents: [security-1]
+#     description: "Security audits and compliance"
+#   tech-writer:
+#     agents: [tech-writer-1]
+#     description: "Technical documentation"
+#   ux-designer:
+#     agents: [ux-1]
+#     description: "UX design and accessibility"
+#   sre:
+#     agents: [sre-1]
+#     description: "Performance testing and deployment prep"
+#   po:
+#     agents: [po-1]
+#     requireHuman: true                       # PO role requires human involvement
+#     description: "Product ownership and business acceptance"
+#   
+#   # Escalation roles (senior staff)
+#   tech-lead:
+#     agents: [architect-1]                    # In small teams, architect doubles as tech lead
+#   qa-lead:
+#     agents: [qa-1]
+#   security-lead:
+#     agents: [security-1]
+#   docs-lead:
+#     agents: [tech-writer-1]
+#   design-lead:
+#     agents: [ux-1]
+#   sre-lead:
+#     agents: [sre-1]
+#   ops-lead:
+#     agents: [sre-1]
+#   director:
+#     agents: []
+#     requireHuman: true                       # Director is always human
+#     description: "Executive escalation point"

@@ -22,13 +22,29 @@ program.action(async (opts: { root: string; interval: string; active: boolean })
     return;
   }
 
-  const service = await startAofDaemon({
+  // Read port and bind from environment (set by CLI fork)
+  const healthPort = process.env["AOF_DAEMON_PORT"] 
+    ? parseInt(process.env["AOF_DAEMON_PORT"], 10) 
+    : 18000;
+  const healthBind = process.env["AOF_DAEMON_BIND"] ?? "127.0.0.1";
+
+  const { service, healthServer } = await startAofDaemon({
     dataDir: opts.root,
     pollIntervalMs,
     dryRun: !opts.active,
+    enableHealthServer: true,
+    healthPort,
+    healthBind,
   });
 
+  console.log(`[AOF] Daemon started. Health endpoint: http://${healthBind}:${healthPort}/health`);
+
   const shutdown = async () => {
+    if (healthServer) {
+      await new Promise<void>((resolve) => {
+        healthServer.close(() => resolve());
+      });
+    }
     await service.stop();
     process.exit(0);
   };
