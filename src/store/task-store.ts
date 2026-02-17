@@ -951,8 +951,13 @@ export class FilesystemTaskStore implements ITaskStore {
 
     const currentStatus = task.frontmatter.status;
 
-    // Terminal states are those with no valid transitions out (done, deadletter)
-    const terminalStates: TaskStatus[] = ["done", "deadletter"];
+    // Cannot block if already blocked
+    if (currentStatus === "blocked") {
+      throw new Error(`Task ${id} is already blocked`);
+    }
+
+    // Terminal states cannot be blocked (done, cancelled, deadletter)
+    const terminalStates: TaskStatus[] = ["done", "cancelled", "deadletter"];
     if (terminalStates.includes(currentStatus)) {
       throw new Error(`Cannot block task ${id} in terminal state: ${currentStatus}`);
     }

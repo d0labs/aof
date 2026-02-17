@@ -548,6 +548,23 @@ task
     await taskCancel(store, eventLogger, taskId, { reason: opts.reason });
   });
 
+task
+  .command("close <task-id>")
+  .description("Close a task (transition to done)")
+  .option("--recover-on-failure", "Attempt automatic recovery on failure", false)
+  .option("--project <id>", "Project ID", "_inbox")
+  .action(async (taskId: string, opts: { recoverOnFailure: boolean; project: string }) => {
+    const { createProjectStore } = await import("./project-utils.js");
+    const { taskClose } = await import("./commands/task-close.js");
+    const root = program.opts()["root"] as string;
+    const { store, projectRoot } = await createProjectStore({ projectId: opts.project, vaultRoot: root });
+    await store.init();
+
+    const eventLogger = new EventLogger(join(projectRoot, "events"));
+
+    await taskClose(store, eventLogger, taskId, { recoverOnFailure: opts.recoverOnFailure });
+  });
+
 // --- org ---
 const org = program
   .command("org")

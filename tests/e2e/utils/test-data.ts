@@ -84,6 +84,8 @@ export async function seedTestData(
   await mkdir(join(dataDir, "tasks", "review"), { recursive: true });
   await mkdir(join(dataDir, "tasks", "done"), { recursive: true });
   await mkdir(join(dataDir, "tasks", "blocked"), { recursive: true });
+  await mkdir(join(dataDir, "tasks", "cancelled"), { recursive: true });
+  await mkdir(join(dataDir, "tasks", "deadletter"), { recursive: true });
   await mkdir(join(dataDir, "org"), { recursive: true });
   await mkdir(join(dataDir, "events"), { recursive: true });
   await mkdir(join(dataDir, "views"), { recursive: true });
