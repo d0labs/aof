@@ -26,6 +26,20 @@
 - [swe-sdlc.yaml](examples/swe-sdlc.yaml) — Full 9-gate SWE workflow with conditionals
 - [sales-pipeline.yaml](examples/sales-pipeline.yaml) — Non-SWE example (demonstrates domain neutrality)
 
+### Murmur Orchestration
+
+**Team-scoped orchestration trigger system** for automated review cycles and team coordination.
+
+Murmur monitors team task queues and automatically spawns orchestration review tasks based on configurable triggers (queue empty, completion batches, time intervals, failure thresholds). This enables periodic team health checks, sprint retrospectives, and capacity planning without manual intervention.
+
+**Key capabilities:**
+- **Declarative triggers** — Configure when orchestration reviews should fire
+- **Stateful evaluation** — Tracks completions, failures, and review history per team
+- **Idempotency guarantees** — Never spawns concurrent reviews for the same team
+- **Stale review cleanup** — Automatically recovers from hung orchestrator sessions
+
+**Configuration:** See [Deployment Guide: Murmur Orchestration Configuration](DEPLOYMENT.md#murmur-orchestration-configuration)
+
 ### Task Management
 
 - **[Beads Integration](BEADS-INTEGRATION.md)** — Task lifecycle and status management
@@ -150,4 +164,5 @@
 ---
 
 **Version:** 1.0  
-**Last Updated:** 2026-02-16
+**Last Updated:** 2026-02-17  
+**Test Suite:** 1752 tests (164 files)
