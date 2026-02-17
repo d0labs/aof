@@ -83,8 +83,14 @@ describe("AOF OpenClaw plugin entrypoint", () => {
       "aof_task_update",
       "aof_status_report",
       "aof_task_complete",
+      "aof_task_edit",
+      "aof_task_cancel",
+      "aof_task_dep_add",
+      "aof_task_dep_remove",
+      "aof_task_block",
+      "aof_task_unblock",
     ]);
-    expect(registry.toolOptionals).toEqual([false, false, false, false]);
+    expect(registry.toolOptionals).toEqual([false, false, false, false, false, false, false, false, false, false]);
     expect(registry.httpRoutes).toEqual(["/aof/metrics", "/aof/status"]);
     expect(registry.events).toEqual(
       expect.arrayContaining(["session_end", "before_compaction", "agent_end", "message_received"]),

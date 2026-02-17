@@ -42,6 +42,12 @@ describe("OpenClaw adapter", () => {
       "aof_task_update",
       "aof_status_report",
       "aof_task_complete",
+      "aof_task_edit",
+      "aof_task_cancel",
+      "aof_task_dep_add",
+      "aof_task_dep_remove",
+      "aof_task_block",
+      "aof_task_unblock",
     ]);
 
     // HTTP routes

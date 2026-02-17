@@ -7,7 +7,18 @@ import { AOFService } from "../service/aof-service.js";
 import { NotificationService } from "../events/notifier.js";
 import { MatrixNotifier } from "./matrix-notifier.js";
 import { OpenClawExecutor } from "./openclaw-executor.js";
-import { aofDispatch, aofStatusReport, aofTaskComplete, aofTaskUpdate } from "../tools/aof-tools.js";
+import { 
+  aofDispatch, 
+  aofStatusReport, 
+  aofTaskComplete, 
+  aofTaskUpdate,
+  aofTaskEdit,
+  aofTaskCancel,
+  aofTaskDepAdd,
+  aofTaskDepRemove,
+  aofTaskBlock,
+  aofTaskUnblock,
+} from "../tools/aof-tools.js";
 import { createMetricsHandler, createStatusHandler } from "../gateway/handlers.js";
 import { loadOrgChart } from "../org/loader.js";
 import { PermissionAwareTaskStore } from "../permissions/task-permissions.js";
@@ -309,6 +320,145 @@ Blocked (can't proceed):
       const actor = (params as any).actor;
       const permissionStore = await getStoreForActor(actor);
       const result = await aofTaskComplete({ store: permissionStore, logger }, params as any);
+      return wrapResult(result);
+    },
+  });
+
+  api.registerTool({
+    name: "aof_task_edit",
+    description: "Edit task metadata fields (title, description, priority, routing). Use to update task details without changing status.",
+    parameters: {
+      type: "object",
+      properties: {
+        taskId: { type: "string", description: "Task ID to edit" },
+        title: { type: "string", description: "New task title" },
+        description: { type: "string", description: "New task description/body" },
+        priority: { 
+          type: "string", 
+          description: "New priority (critical, high, normal, low)",
+          enum: ["critical", "high", "normal", "low"]
+        },
+        routing: {
+          type: "object",
+          description: "Update routing fields (agent, team, role, tags)",
+          properties: {
+            agent: { type: "string", description: "Assigned agent ID" },
+            team: { type: "string", description: "Team name" },
+            role: { type: "string", description: "Role name" },
+            tags: { 
+              type: "array", 
+              items: { type: "string" },
+              description: "Task tags"
+            },
+          },
+        },
+        actor: { type: "string", description: "Agent performing the edit" },
+      },
+      required: ["taskId"],
+    },
+    execute: async (_id: string, params: Record<string, unknown>) => {
+      const actor = (params as any).actor;
+      const permissionStore = await getStoreForActor(actor);
+      const result = await aofTaskEdit({ store: permissionStore, logger }, params as any);
+      return wrapResult(result);
+    },
+  });
+
+  api.registerTool({
+    name: "aof_task_cancel",
+    description: "Cancel a task. Moves task to cancelled status and clears any active lease. Use when a task is no longer needed or has become obsolete.",
+    parameters: {
+      type: "object",
+      properties: {
+        taskId: { type: "string", description: "Task ID to cancel" },
+        reason: { type: "string", description: "Reason for cancellation (optional but recommended)" },
+        actor: { type: "string", description: "Agent performing the cancellation" },
+      },
+      required: ["taskId"],
+    },
+    execute: async (_id: string, params: Record<string, unknown>) => {
+      const actor = (params as any).actor;
+      const permissionStore = await getStoreForActor(actor);
+      const result = await aofTaskCancel({ store: permissionStore, logger }, params as any);
+      return wrapResult(result);
+    },
+  });
+
+  api.registerTool({
+    name: "aof_task_dep_add",
+    description: "Add a dependency to a task. Makes taskId depend on blockerId (taskId cannot start until blockerId is done). Validates both tasks exist and prevents circular dependencies.",
+    parameters: {
+      type: "object",
+      properties: {
+        taskId: { type: "string", description: "Task that will depend on the blocker" },
+        blockerId: { type: "string", description: "Task that must complete first" },
+        actor: { type: "string", description: "Agent creating the dependency" },
+      },
+      required: ["taskId", "blockerId"],
+    },
+    execute: async (_id: string, params: Record<string, unknown>) => {
+      const actor = (params as any).actor;
+      const permissionStore = await getStoreForActor(actor);
+      const result = await aofTaskDepAdd({ store: permissionStore, logger }, params as any);
+      return wrapResult(result);
+    },
+  });
+
+  api.registerTool({
+    name: "aof_task_dep_remove",
+    description: "Remove a dependency from a task. Removes the blocker relationship between taskId and blockerId.",
+    parameters: {
+      type: "object",
+      properties: {
+        taskId: { type: "string", description: "Task to remove dependency from" },
+        blockerId: { type: "string", description: "Blocker task to remove" },
+        actor: { type: "string", description: "Agent removing the dependency" },
+      },
+      required: ["taskId", "blockerId"],
+    },
+    execute: async (_id: string, params: Record<string, unknown>) => {
+      const actor = (params as any).actor;
+      const permissionStore = await getStoreForActor(actor);
+      const result = await aofTaskDepRemove({ store: permissionStore, logger }, params as any);
+      return wrapResult(result);
+    },
+  });
+
+  api.registerTool({
+    name: "aof_task_block",
+    description: "Block a task with a reason. Transitions task to blocked state. Use when external dependencies prevent progress. The reason should clearly explain what's blocking the task.",
+    parameters: {
+      type: "object",
+      properties: {
+        taskId: { type: "string", description: "Task ID to block" },
+        reason: { type: "string", description: "Why the task is blocked (required, must be clear and actionable)" },
+        actor: { type: "string", description: "Agent blocking the task" },
+      },
+      required: ["taskId", "reason"],
+    },
+    execute: async (_id: string, params: Record<string, unknown>) => {
+      const actor = (params as any).actor;
+      const permissionStore = await getStoreForActor(actor);
+      const result = await aofTaskBlock({ store: permissionStore, logger }, params as any);
+      return wrapResult(result);
+    },
+  });
+
+  api.registerTool({
+    name: "aof_task_unblock",
+    description: "Unblock a task. Transitions task from blocked to ready state. Use when the blocking issue has been resolved.",
+    parameters: {
+      type: "object",
+      properties: {
+        taskId: { type: "string", description: "Task ID to unblock" },
+        actor: { type: "string", description: "Agent unblocking the task" },
+      },
+      required: ["taskId"],
+    },
+    execute: async (_id: string, params: Record<string, unknown>) => {
+      const actor = (params as any).actor;
+      const permissionStore = await getStoreForActor(actor);
+      const result = await aofTaskUnblock({ store: permissionStore, logger }, params as any);
       return wrapResult(result);
     },
   });

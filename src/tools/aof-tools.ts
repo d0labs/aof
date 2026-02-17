@@ -487,3 +487,304 @@ export async function aofStatusReport(
     tasks: summary,
   };
 }
+
+// ===== NEW TASK MANAGEMENT TOOLS =====
+
+export interface AOFTaskEditInput {
+  taskId: string;
+  title?: string;
+  description?: string;
+  priority?: TaskPriority;
+  routing?: {
+    role?: string;
+    team?: string;
+    agent?: string;
+    tags?: string[];
+  };
+  actor?: string;
+}
+
+export interface AOFTaskEditResult extends ToolResponseEnvelope {
+  taskId: string;
+  updatedFields: string[];
+  task: {
+    title: string;
+    status: TaskStatus;
+    priority: TaskPriority;
+  };
+}
+
+export async function aofTaskEdit(
+  ctx: ToolContext,
+  input: AOFTaskEditInput,
+): Promise<AOFTaskEditResult> {
+  const actor = input.actor ?? "unknown";
+  const task = await resolveTask(ctx.store, input.taskId);
+
+  // Build patch object
+  const patch: {
+    title?: string;
+    description?: string;
+    priority?: string;
+    routing?: {
+      role?: string;
+      team?: string;
+      agent?: string;
+      tags?: string[];
+    };
+  } = {};
+
+  const updatedFields: string[] = [];
+
+  if (input.title !== undefined) {
+    patch.title = input.title;
+    updatedFields.push("title");
+  }
+
+  if (input.description !== undefined) {
+    patch.description = input.description;
+    updatedFields.push("description");
+  }
+
+  if (input.priority !== undefined) {
+    patch.priority = input.priority;
+    updatedFields.push("priority");
+  }
+
+  if (input.routing !== undefined) {
+    patch.routing = input.routing;
+    updatedFields.push("routing");
+  }
+
+  if (updatedFields.length === 0) {
+    throw new Error("No fields to update. Provide at least one of: title, description, priority, routing");
+  }
+
+  const updatedTask = await ctx.store.update(task.frontmatter.id, patch);
+
+  const summary = `Task ${updatedTask.frontmatter.id} updated: ${updatedFields.join(", ")}`;
+  const envelope = compactResponse(summary, {
+    taskId: updatedTask.frontmatter.id,
+    updatedFields,
+  });
+
+  return {
+    ...envelope,
+    taskId: updatedTask.frontmatter.id,
+    updatedFields,
+    task: {
+      title: updatedTask.frontmatter.title,
+      status: updatedTask.frontmatter.status,
+      priority: updatedTask.frontmatter.priority,
+    },
+  };
+}
+
+export interface AOFTaskCancelInput {
+  taskId: string;
+  reason?: string;
+  actor?: string;
+}
+
+export interface AOFTaskCancelResult extends ToolResponseEnvelope {
+  taskId: string;
+  status: TaskStatus;
+  reason?: string;
+}
+
+export async function aofTaskCancel(
+  ctx: ToolContext,
+  input: AOFTaskCancelInput,
+): Promise<AOFTaskCancelResult> {
+  const actor = input.actor ?? "unknown";
+  const task = await resolveTask(ctx.store, input.taskId);
+
+  const cancelledTask = await ctx.store.cancel(task.frontmatter.id, input.reason);
+
+  await ctx.logger.log("task.cancelled", actor, {
+    taskId: cancelledTask.frontmatter.id,
+    payload: { reason: input.reason },
+  });
+
+  const summary = input.reason
+    ? `Task ${cancelledTask.frontmatter.id} cancelled: ${input.reason}`
+    : `Task ${cancelledTask.frontmatter.id} cancelled`;
+
+  const envelope = compactResponse(summary, {
+    taskId: cancelledTask.frontmatter.id,
+    status: cancelledTask.frontmatter.status,
+  });
+
+  return {
+    ...envelope,
+    taskId: cancelledTask.frontmatter.id,
+    status: cancelledTask.frontmatter.status,
+    reason: input.reason,
+  };
+}
+
+export interface AOFTaskDepAddInput {
+  taskId: string;
+  blockerId: string;
+  actor?: string;
+}
+
+export interface AOFTaskDepAddResult extends ToolResponseEnvelope {
+  taskId: string;
+  blockerId: string;
+  dependsOn: string[];
+}
+
+export async function aofTaskDepAdd(
+  ctx: ToolContext,
+  input: AOFTaskDepAddInput,
+): Promise<AOFTaskDepAddResult> {
+  const actor = input.actor ?? "unknown";
+  
+  // Validate both tasks exist
+  const task = await resolveTask(ctx.store, input.taskId);
+  const blocker = await resolveTask(ctx.store, input.blockerId);
+
+  const updatedTask = await ctx.store.addDep(task.frontmatter.id, blocker.frontmatter.id);
+
+  await ctx.logger.log("task.dependency.added", actor, {
+    taskId: updatedTask.frontmatter.id,
+    payload: { blockerId: blocker.frontmatter.id },
+  });
+
+  const summary = `Task ${updatedTask.frontmatter.id} now depends on ${blocker.frontmatter.id}`;
+  const envelope = compactResponse(summary, {
+    taskId: updatedTask.frontmatter.id,
+    blockerId: blocker.frontmatter.id,
+  });
+
+  return {
+    ...envelope,
+    taskId: updatedTask.frontmatter.id,
+    blockerId: blocker.frontmatter.id,
+    dependsOn: updatedTask.frontmatter.dependsOn ?? [],
+  };
+}
+
+export interface AOFTaskDepRemoveInput {
+  taskId: string;
+  blockerId: string;
+  actor?: string;
+}
+
+export interface AOFTaskDepRemoveResult extends ToolResponseEnvelope {
+  taskId: string;
+  blockerId: string;
+  dependsOn: string[];
+}
+
+export async function aofTaskDepRemove(
+  ctx: ToolContext,
+  input: AOFTaskDepRemoveInput,
+): Promise<AOFTaskDepRemoveResult> {
+  const actor = input.actor ?? "unknown";
+  
+  // Validate both tasks exist
+  const task = await resolveTask(ctx.store, input.taskId);
+  const blocker = await resolveTask(ctx.store, input.blockerId);
+
+  const updatedTask = await ctx.store.removeDep(task.frontmatter.id, blocker.frontmatter.id);
+
+  await ctx.logger.log("task.dependency.removed", actor, {
+    taskId: updatedTask.frontmatter.id,
+    payload: { blockerId: blocker.frontmatter.id },
+  });
+
+  const summary = `Task ${updatedTask.frontmatter.id} no longer depends on ${blocker.frontmatter.id}`;
+  const envelope = compactResponse(summary, {
+    taskId: updatedTask.frontmatter.id,
+    blockerId: blocker.frontmatter.id,
+  });
+
+  return {
+    ...envelope,
+    taskId: updatedTask.frontmatter.id,
+    blockerId: blocker.frontmatter.id,
+    dependsOn: updatedTask.frontmatter.dependsOn ?? [],
+  };
+}
+
+export interface AOFTaskBlockInput {
+  taskId: string;
+  reason: string;
+  actor?: string;
+}
+
+export interface AOFTaskBlockResult extends ToolResponseEnvelope {
+  taskId: string;
+  status: TaskStatus;
+  reason: string;
+}
+
+export async function aofTaskBlock(
+  ctx: ToolContext,
+  input: AOFTaskBlockInput,
+): Promise<AOFTaskBlockResult> {
+  const actor = input.actor ?? "unknown";
+  const task = await resolveTask(ctx.store, input.taskId);
+
+  if (!input.reason || input.reason.trim().length === 0) {
+    throw new Error("Block reason is required. Provide a clear explanation of what's blocking progress.");
+  }
+
+  const blockedTask = await ctx.store.block(task.frontmatter.id, input.reason);
+
+  await ctx.logger.log("task.blocked", actor, {
+    taskId: blockedTask.frontmatter.id,
+    payload: { reason: input.reason },
+  });
+
+  const summary = `Task ${blockedTask.frontmatter.id} blocked: ${input.reason}`;
+  const envelope = compactResponse(summary, {
+    taskId: blockedTask.frontmatter.id,
+    status: blockedTask.frontmatter.status,
+  });
+
+  return {
+    ...envelope,
+    taskId: blockedTask.frontmatter.id,
+    status: blockedTask.frontmatter.status,
+    reason: input.reason,
+  };
+}
+
+export interface AOFTaskUnblockInput {
+  taskId: string;
+  actor?: string;
+}
+
+export interface AOFTaskUnblockResult extends ToolResponseEnvelope {
+  taskId: string;
+  status: TaskStatus;
+}
+
+export async function aofTaskUnblock(
+  ctx: ToolContext,
+  input: AOFTaskUnblockInput,
+): Promise<AOFTaskUnblockResult> {
+  const actor = input.actor ?? "unknown";
+  const task = await resolveTask(ctx.store, input.taskId);
+
+  const unblockedTask = await ctx.store.unblock(task.frontmatter.id);
+
+  await ctx.logger.log("task.unblocked", actor, {
+    taskId: unblockedTask.frontmatter.id,
+  });
+
+  const summary = `Task ${unblockedTask.frontmatter.id} unblocked and moved to ready`;
+  const envelope = compactResponse(summary, {
+    taskId: unblockedTask.frontmatter.id,
+    status: unblockedTask.frontmatter.status,
+  });
+
+  return {
+    ...envelope,
+    taskId: unblockedTask.frontmatter.id,
+    status: unblockedTask.frontmatter.status,
+  };
+}
