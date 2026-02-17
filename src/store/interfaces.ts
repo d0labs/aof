@@ -136,4 +136,17 @@ export interface ITaskStore {
    * Creates the outputs directory if it doesn't exist.
    */
   writeTaskOutput(id: string, filename: string, content: string): Promise<void>;
+
+  /**
+   * Add a dependency to a task.
+   * Makes taskId depend on blockerId (taskId cannot start until blockerId is done).
+   * Validates that both tasks exist and rejects circular dependencies.
+   */
+  addDep(taskId: string, blockerId: string): Promise<Task>;
+
+  /**
+   * Remove a dependency from a task.
+   * Returns the updated task.
+   */
+  removeDep(taskId: string, blockerId: string): Promise<Task>;
 }

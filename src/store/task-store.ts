@@ -717,4 +717,129 @@ export class FilesystemTaskStore implements ITaskStore {
     const filePath = join(outputsDir, filename);
     await writeFileAtomic(filePath, content);
   }
+
+  /**
+   * Check if adding a dependency would create a cycle.
+   * Returns true if blockerId (or any of its transitive dependencies) depends on taskId.
+   * Uses DFS to detect cycles in the dependency graph.
+   */
+  private async hasCycle(taskId: string, blockerId: string): Promise<boolean> {
+    const visited = new Set<string>();
+
+    const dfs = async (currentId: string): Promise<boolean> => {
+      // If we've reached taskId, there's a cycle
+      if (currentId === taskId) {
+        return true;
+      }
+
+      // Already visited this node in this search path
+      if (visited.has(currentId)) {
+        return false;
+      }
+
+      visited.add(currentId);
+
+      const task = await this.get(currentId);
+      if (!task) {
+        return false; // Task doesn't exist
+      }
+
+      // Check all dependencies recursively
+      for (const depId of task.frontmatter.dependsOn) {
+        if (await dfs(depId)) {
+          return true;
+        }
+      }
+
+      return false;
+    };
+
+    // Check if blockerId (or any of its dependencies) depends on taskId
+    // Start DFS from blockerId
+    return await dfs(blockerId);
+  }
+
+  /**
+   * Add a dependency to a task.
+   * Makes taskId depend on blockerId (taskId cannot start until blockerId is done).
+   */
+  async addDep(taskId: string, blockerId: string): Promise<Task> {
+    // Validate both tasks exist
+    const task = await this.get(taskId);
+    if (!task) {
+      throw new Error(`Task not found: ${taskId}`);
+    }
+
+    const blocker = await this.get(blockerId);
+    if (!blocker) {
+      throw new Error(`Blocker task not found: ${blockerId}`);
+    }
+
+    // Reject self-dependency
+    if (taskId === blockerId) {
+      throw new Error(`Task cannot depend on itself: ${taskId}`);
+    }
+
+    // Check if already depends
+    if (task.frontmatter.dependsOn.includes(blockerId)) {
+      return task; // Idempotent: already has this dependency
+    }
+
+    // Check for circular dependencies
+    if (await this.hasCycle(taskId, blockerId)) {
+      throw new Error(`Adding dependency would create a circular dependency: ${taskId} -> ${blockerId}`);
+    }
+
+    // Update task
+    task.frontmatter.dependsOn.push(blockerId);
+    task.frontmatter.updatedAt = new Date().toISOString();
+
+    // Write atomically
+    const filePath = task.path ?? this.taskPath(taskId, task.frontmatter.status);
+    await writeFileAtomic(filePath, serializeTask(task));
+
+    // Emit event
+    if (this.logger) {
+      await this.logger.log("task.dep.added", "system", {
+        taskId,
+        payload: { taskId, blockerId },
+      });
+    }
+
+    return task;
+  }
+
+  /**
+   * Remove a dependency from a task.
+   */
+  async removeDep(taskId: string, blockerId: string): Promise<Task> {
+    const task = await this.get(taskId);
+    if (!task) {
+      throw new Error(`Task not found: ${taskId}`);
+    }
+
+    // Check if dependency exists
+    const index = task.frontmatter.dependsOn.indexOf(blockerId);
+    if (index === -1) {
+      return task; // Idempotent: dependency doesn't exist
+    }
+
+    // Remove dependency
+    task.frontmatter.dependsOn.splice(index, 1);
+    task.frontmatter.updatedAt = new Date().toISOString();
+
+    // Write atomically
+    const filePath = task.path ?? this.taskPath(taskId, task.frontmatter.status);
+    await writeFileAtomic(filePath, serializeTask(task));
+
+    // Emit event
+    if (this.logger) {
+      await this.logger.log("task.dep.removed", "system", {
+        taskId,
+        payload: { taskId, blockerId },
+      });
+    }
+
+    return task;
+  }
 }

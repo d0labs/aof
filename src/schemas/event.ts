@@ -26,6 +26,8 @@ export const EventType = z.enum([
   "task.validation.failed",
   "task.deadletter",
   "task.resurrected",
+  "task.dep.added",
+  "task.dep.removed",
 
   // Project management
   "project.validation.failed",
