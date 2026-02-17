@@ -6,7 +6,7 @@ import type { EventType } from "../schemas/event.js";
 import type { Task } from "../schemas/task.js";
 import { isValidTransition } from "../schemas/task.js";
 import type { TaskStatus } from "../schemas/task.js";
-import type { TaskStore } from "../store/task-store.js";
+import type { ITaskStore } from "../store/interfaces.js";
 import { serializeTask } from "../store/task-store.js";
 import type { NotificationService } from "../events/notifier.js";
 import { readRunResult, writeRunResult } from "../recovery/run-artifacts.js";
@@ -60,7 +60,7 @@ export function parseProtocolMessage(
 }
 
 export interface ProtocolRouterDependencies {
-  store: TaskStore;
+  store: ITaskStore;
   logger?: ProtocolLogger;
   notifier?: NotificationService;
   lockManager?: TaskLockManager;
@@ -70,10 +70,10 @@ export interface ProtocolRouterDependencies {
 export class ProtocolRouter {
   private readonly handlers: Record<
     string,
-    (envelope: ProtocolEnvelopeType, store: TaskStore) => Promise<void> | void
+    (envelope: ProtocolEnvelopeType, store: ITaskStore) => Promise<void> | void
   >;
   private readonly logger?: ProtocolLogger;
-  private readonly store: TaskStore;
+  private readonly store: ITaskStore;
   private readonly notifier?: NotificationService;
   private readonly lockManager: TaskLockManager;
   private readonly projectStoreResolver?: (projectId: string) => TaskStore | undefined;
@@ -147,7 +147,7 @@ export class ProtocolRouter {
 
   async handleCompletionReport(
     envelope: ProtocolEnvelopeType,
-    store: TaskStore,
+    store: ITaskStore,
   ): Promise<void> {
     await this.logger?.log("protocol.message.received", envelope.fromAgent, {
       taskId: envelope.taskId,
@@ -204,7 +204,7 @@ export class ProtocolRouter {
 
   async handleStatusUpdate(
     envelope: ProtocolEnvelopeType,
-    store: TaskStore,
+    store: ITaskStore,
   ): Promise<void> {
     await this.logger?.log("protocol.message.received", envelope.fromAgent, {
       taskId: envelope.taskId,
@@ -285,7 +285,7 @@ export class ProtocolRouter {
 
   async handleHandoffRequest(
     envelope: ProtocolEnvelopeType,
-    store: TaskStore,
+    store: ITaskStore,
   ): Promise<void> {
     await this.logger?.log("protocol.message.received", envelope.fromAgent, {
       taskId: envelope.taskId,
@@ -376,7 +376,7 @@ export class ProtocolRouter {
 
   async handleHandoffAck(
     envelope: ProtocolEnvelopeType,
-    store: TaskStore,
+    store: ITaskStore,
   ): Promise<void> {
     await this.logger?.log("protocol.message.received", envelope.fromAgent, {
       taskId: envelope.taskId,
@@ -462,7 +462,7 @@ export class ProtocolRouter {
       notes?: string;
       blockers?: string[];
     },
-    store: TaskStore,
+    store: ITaskStore,
   ): Promise<void> {
     const transitions = resolveCompletionTransitions(task, opts.outcome);
     if (transitions.length === 0) return;
@@ -503,7 +503,7 @@ export class ProtocolRouter {
     status: TaskStatus,
     actor: string,
     reason: string | undefined,
-    store: TaskStore,
+    store: ITaskStore,
   ): Promise<Task> {
     if (task.frontmatter.status === status) return task;
     if (!isValidTransition(task.frontmatter.status, status)) return task;
@@ -513,7 +513,7 @@ export class ProtocolRouter {
   private async appendWorkLog(
     task: Task,
     payload: StatusUpdatePayload,
-    store: TaskStore,
+    store: ITaskStore,
   ): Promise<Task> {
     const entry = buildWorkLogEntry(payload);
     if (!entry) return task;

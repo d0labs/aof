@@ -7,7 +7,8 @@ import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { randomBytes } from "node:crypto";
-import { TaskStore } from "../../store/task-store.js";
+import { FilesystemTaskStore } from "../../store/task-store.js";
+import type { ITaskStore } from "../../store/interfaces.js";
 import { EventLogger } from "../../events/logger.js";
 import { AOFMetrics } from "../../metrics/exporter.js";
 import type { OrgChart } from "../../schemas/org-chart.js";
@@ -21,14 +22,14 @@ import {
 
 describe("Context Steward Integration", () => {
   let tmpDir: string;
-  let store: TaskStore;
+  let store: ITaskStore;
   let eventLogger: EventLogger;
   let metrics: AOFMetrics;
 
   beforeEach(async () => {
     tmpDir = join(tmpdir(), `aof-test-${randomBytes(8).toString("hex")}`);
     await mkdir(tmpDir, { recursive: true });
-    store = new TaskStore(tmpDir);
+    store = new FilesystemTaskStore(tmpDir);
     await store.init();
     eventLogger = new EventLogger(join(tmpDir, "events"));
     metrics = new AOFMetrics();

@@ -5,14 +5,15 @@ import { join } from "node:path";
 import { parseProtocolMessage, ProtocolRouter } from "../router.js";
 import type { ProtocolEnvelope } from "../../schemas/protocol.js";
 import type { EventType } from "../../schemas/event.js";
-import { TaskStore } from "../../store/task-store.js";
+import { FilesystemTaskStore } from "../../store/task-store.js";
+import type { ITaskStore } from "../../store/interfaces.js";
 
 let tmpDir: string;
-let store: TaskStore;
+let store: ITaskStore;
 
 beforeEach(async () => {
   tmpDir = await mkdtemp(join(tmpdir(), "aof-protocol-router-test-"));
-  store = new TaskStore(tmpDir);
+  store = new FilesystemTaskStore(tmpDir);
   await store.init();
 });
 
@@ -156,7 +157,7 @@ describe("ProtocolRouter", () => {
 
   it("rejects envelope with invalid projectId", async () => {
     const logger = makeLogger();
-    const projectStore = new TaskStore(tmpDir);
+    const projectStore = new FilesystemTaskStore(tmpDir);
     await projectStore.init();
 
     const resolver = vi.fn(() => undefined);
@@ -185,7 +186,7 @@ describe("ProtocolRouter", () => {
 
   it("rejects envelope when task not found in project", async () => {
     const logger = makeLogger();
-    const projectStore = new TaskStore(tmpDir);
+    const projectStore = new FilesystemTaskStore(tmpDir);
     await projectStore.init();
 
     const resolver = vi.fn(() => projectStore);
@@ -209,7 +210,7 @@ describe("ProtocolRouter", () => {
 
   it("resolves correct project store and routes successfully", async () => {
     const logger = makeLogger();
-    const projectStore = new TaskStore(tmpDir);
+    const projectStore = new FilesystemTaskStore(tmpDir);
     await projectStore.init();
     
     // Create task in project store

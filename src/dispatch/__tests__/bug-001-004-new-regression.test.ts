@@ -10,7 +10,8 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { mkdtemp, rm, readFile, readdir } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { TaskStore } from "../../store/task-store.js";
+import { FilesystemTaskStore } from "../../store/task-store.js";
+import type { ITaskStore } from "../../store/interfaces.js";
 import { EventLogger } from "../../events/logger.js";
 import { poll } from "../scheduler.js";
 import { MockExecutor } from "../executor.js";
@@ -18,14 +19,14 @@ import type { BaseEvent } from "../../schemas/event.js";
 
 describe("BUG-001: Scheduler Polls But Never Executes Ready Tasks (NEW)", () => {
   let tmpDir: string;
-  let store: TaskStore;
+  let store: ITaskStore;
   let logger: EventLogger;
   let executor: MockExecutor;
   let events: BaseEvent[];
 
   beforeEach(async () => {
     tmpDir = await mkdtemp(join(tmpdir(), "new-bug001-test-"));
-    store = new TaskStore(tmpDir);
+    store = new FilesystemTaskStore(tmpDir);
     await store.init();
     
     events = [];
@@ -193,7 +194,7 @@ describe("BUG-001: Scheduler Polls But Never Executes Ready Tasks (NEW)", () => 
 
 describe("BUG-002: No Tasks Ever Reach In-Progress Status (NEW)", () => {
   let tmpDir: string;
-  let store: TaskStore;
+  let store: ITaskStore;
   let logger: EventLogger;
   let executor: MockExecutor;
   let events: BaseEvent[];
@@ -206,7 +207,7 @@ describe("BUG-002: No Tasks Ever Reach In-Progress Status (NEW)", () => {
       onEvent: (event) => events.push(event),
     });
     
-    store = new TaskStore(tmpDir, { logger });
+    store = new FilesystemTaskStore(tmpDir, { logger });
     await store.init();
     
     executor = new MockExecutor();
@@ -315,14 +316,14 @@ describe("BUG-002: No Tasks Ever Reach In-Progress Status (NEW)", () => {
 
 describe("BUG-004: Scheduler Event Logs Missing Action Metadata (NEW)", () => {
   let tmpDir: string;
-  let store: TaskStore;
+  let store: ITaskStore;
   let logger: EventLogger;
   let executor: MockExecutor;
   let events: BaseEvent[];
 
   beforeEach(async () => {
     tmpDir = await mkdtemp(join(tmpdir(), "new-bug004-test-"));
-    store = new TaskStore(tmpDir);
+    store = new FilesystemTaskStore(tmpDir);
     await store.init();
     
     events = [];

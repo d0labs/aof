@@ -6,7 +6,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdtemp, rm, mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { TaskStore } from "../../store/task-store.js";
+import { FilesystemTaskStore } from "../../store/task-store.js";
 import { createProjectStore } from "../project-utils.js";
 
 describe("CLI project-scoped commands", () => {

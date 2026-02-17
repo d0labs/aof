@@ -6,7 +6,8 @@
  */
 
 import { describe, it, expect, beforeEach, vi, afterEach } from "vitest";
-import { TaskStore, serializeTask } from "../../store/task-store.js";
+import { FilesystemTaskStore, serializeTask } from "../../store/task-store.js";
+import type { ITaskStore } from "../../store/interfaces.js";
 import { EventLogger } from "../../events/logger.js";
 import { poll } from "../scheduler.js";
 import type { SchedulerConfig } from "../scheduler.js";
@@ -18,7 +19,7 @@ import writeFileAtomic from "write-file-atomic";
 
 describe("Resource Serialization (TASK-054)", () => {
   let testDataDir: string;
-  let store: TaskStore;
+  let store: ITaskStore;
   let logger: EventLogger;
   let config: SchedulerConfig;
   let consoleWarnSpy: ReturnType<typeof vi.spyOn>;
@@ -27,7 +28,7 @@ describe("Resource Serialization (TASK-054)", () => {
     // Create temp test directory
     testDataDir = await mkdtemp(join(tmpdir(), "aof-resource-test-"));
     
-    store = new TaskStore(testDataDir);
+    store = new FilesystemTaskStore(testDataDir);
     await store.init();
     
     const eventsDir = join(testDataDir, "events");

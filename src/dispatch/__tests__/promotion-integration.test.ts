@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { TaskStore } from "../../store/task-store.js";
+import { FilesystemTaskStore } from "../../store/task-store.js";
+import type { ITaskStore } from "../../store/interfaces.js";
 import { EventLogger } from "../../events/logger.js";
 import { poll } from "../scheduler.js";
 import { mkdtemp, rm } from "node:fs/promises";
@@ -8,12 +9,12 @@ import { join } from "node:path";
 
 describe("Promotion Integration", () => {
   let testDir: string;
-  let store: TaskStore;
+  let store: ITaskStore;
   let logger: EventLogger;
 
   beforeEach(async () => {
     testDir = await mkdtemp(join(tmpdir(), "aof-promotion-test-"));
-    store = new TaskStore(testDir, { projectId: "_inbox" });
+    store = new FilesystemTaskStore(testDir, { projectId: "_inbox" });
     await store.init();
     logger = new EventLogger(join(testDir, "events"));
   });

@@ -2,7 +2,8 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdtemp, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { TaskStore } from "../../store/task-store.js";
+import { FilesystemTaskStore } from "../../store/task-store.js";
+import type { ITaskStore } from "../../store/interfaces.js";
 import { createAofMcpContext } from "../shared.js";
 import { mapWatchEventToUris, SubscriptionManager } from "../subscriptions.js";
 import type { RequestHandlerExtra } from "@modelcontextprotocol/sdk/shared/protocol.js";
@@ -15,11 +16,11 @@ const createExtra = (send: RequestHandlerExtra<ServerRequest, ServerNotification
 
 describe("mcp subscriptions", () => {
   let dataDir: string;
-  let store: TaskStore;
+  let store: ITaskStore;
 
   beforeEach(async () => {
     dataDir = await mkdtemp(join(tmpdir(), "aof-mcp-subscriptions-"));
-    store = new TaskStore(dataDir);
+    store = new FilesystemTaskStore(dataDir);
     await store.init();
   });
 

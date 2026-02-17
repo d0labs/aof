@@ -9,7 +9,8 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { TaskStore } from "../../../src/store/task-store.js";
+import { FilesystemTaskStore } from "../../../src/store/task-store.js";
+import type { ITaskStore } from "../../../src/store/interfaces.js";
 import {
   acquireLease,
   releaseLease,
@@ -23,12 +24,12 @@ import { homedir } from "node:os";
 const TEST_DATA_DIR = join(homedir(), ".openclaw-aof-e2e-test", "concurrent-dispatch");
 
 describe("E2E: Concurrent Dispatch + Lease Manager", () => {
-  let store: TaskStore;
+  let store: ITaskStore;
 
   beforeEach(async () => {
     await cleanupTestData(TEST_DATA_DIR);
     await seedTestData(TEST_DATA_DIR);
-    store = new TaskStore(TEST_DATA_DIR);
+    store = new FilesystemTaskStore(TEST_DATA_DIR);
   });
 
   afterEach(async () => {

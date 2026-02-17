@@ -12,7 +12,7 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { parse as parseYaml } from "yaml";
-import type { TaskStore } from "../store/task-store.js";
+import type { ITaskStore } from "../store/interfaces.js";
 import type { EventLogger } from "../events/logger.js";
 import type { Task, TaskStatus } from "../schemas/task.js";
 import { evaluateGateTransition, type GateEvaluationInput, type GateEvaluationResult } from "./gate-evaluator.js";
@@ -54,7 +54,7 @@ export async function loadProjectManifest(projectRoot: string): Promise<ProjectM
  * @param result - Gate evaluation result with task updates
  */
 async function applyGateTransition(
-  store: TaskStore,
+  store: ITaskStore,
   task: Task,
   result: GateEvaluationResult
 ): Promise<void> {
@@ -129,7 +129,7 @@ async function applyGateTransition(
  * @throws Error if task not found, no workflow, or invalid workflow
  */
 export async function handleGateTransition(
-  store: TaskStore,
+  store: ITaskStore,
   logger: EventLogger,
   taskId: string,
   outcome: GateOutcome,

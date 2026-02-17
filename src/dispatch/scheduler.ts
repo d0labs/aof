@@ -5,7 +5,8 @@
  * No LLM calls. Filesystem I/O only.
  */
 
-import { TaskStore, serializeTask } from "../store/task-store.js";
+import { FilesystemTaskStore, serializeTask } from "../store/task-store.js";
+import type { ITaskStore } from "../store/interfaces.js";
 import { EventLogger } from "../events/logger.js";
 import { acquireLease, expireLeases, renewLease, releaseLease } from "../store/lease.js";
 import { checkStaleHeartbeats, markRunArtifactExpired, readRunResult } from "../recovery/run-artifacts.js";
@@ -86,11 +87,11 @@ const leaseRenewalTimers = new Map<string, NodeJS.Timeout>();
  */
 let effectiveConcurrencyLimit: number | null = null;
 
-function leaseRenewalKey(store: TaskStore, taskId: string): string {
+function leaseRenewalKey(store: ITaskStore, taskId: string): string {
   return `${store.projectId}:${taskId}`;
 }
 
-function stopLeaseRenewal(store: TaskStore, taskId: string): void {
+function stopLeaseRenewal(store: ITaskStore, taskId: string): void {
   const key = leaseRenewalKey(store, taskId);
   const timer = leaseRenewalTimers.get(key);
   if (!timer) return;
@@ -98,7 +99,7 @@ function stopLeaseRenewal(store: TaskStore, taskId: string): void {
   leaseRenewalTimers.delete(key);
 }
 
-function startLeaseRenewal(store: TaskStore, taskId: string, agentId: string, leaseTtlMs: number): void {
+function startLeaseRenewal(store: ITaskStore, taskId: string, agentId: string, leaseTtlMs: number): void {
   const key = leaseRenewalKey(store, taskId);
   if (leaseRenewalTimers.has(key)) return;
 
@@ -116,7 +117,7 @@ function startLeaseRenewal(store: TaskStore, taskId: string, agentId: string, le
   leaseRenewalTimers.set(key, timer);
 }
 
-function cleanupLeaseRenewals(store: TaskStore, tasks: Task[]): void {
+function cleanupLeaseRenewals(store: ITaskStore, tasks: Task[]): void {
   const active = new Set<string>();
   for (const task of tasks) {
     if (task.frontmatter.status !== "in-progress") continue;
@@ -208,7 +209,7 @@ export function checkPromotionEligibility(
  * @returns Project manifest or null if not found
  */
 async function loadProjectManifest(
-  store: TaskStore,
+  store: ITaskStore,
   projectId: string
 ): Promise<ProjectManifest | null> {
   try {
@@ -231,7 +232,7 @@ async function loadProjectManifest(
  * @returns Array of scheduler actions (alerts for timeouts)
  */
 async function checkGateTimeouts(
-  store: TaskStore,
+  store: ITaskStore,
   logger: EventLogger,
   config: SchedulerConfig,
   metrics?: import("../metrics/exporter.js").AOFMetrics
@@ -309,7 +310,7 @@ async function escalateGateTimeout(
   gate: { id: string; role: string; timeout?: string; escalateTo?: string },
   workflow: WorkflowConfig,
   elapsedMs: number,
-  store: TaskStore,
+  store: ITaskStore,
   logger: EventLogger,
   config: SchedulerConfig,
   metrics?: import("../metrics/exporter.js").AOFMetrics
@@ -417,7 +418,7 @@ async function escalateGateTimeout(
  * In active mode, executes the actions (Phase 1+).
  */
 export async function poll(
-  store: TaskStore,
+  store: ITaskStore,
   logger: EventLogger,
   config: SchedulerConfig,
   metrics?: import("../metrics/exporter.js").AOFMetrics,

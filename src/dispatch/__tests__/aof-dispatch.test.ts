@@ -9,18 +9,19 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { TaskStore } from "../../store/task-store.js";
+import { FilesystemTaskStore } from "../../store/task-store.js";
+import type { ITaskStore } from "../../store/interfaces.js";
 import { MockExecutor } from "../executor.js";
 import { aofDispatch } from "../aof-dispatch.js";
 
 describe("aof_dispatch", () => {
   let tmpDir: string;
-  let store: TaskStore;
+  let store: ITaskStore;
   let executor: MockExecutor;
 
   beforeEach(async () => {
     tmpDir = await mkdtemp(join(tmpdir(), "aof-dispatch-test-"));
-    store = new TaskStore(tmpDir);
+    store = new FilesystemTaskStore(tmpDir);
     await store.init();
     executor = new MockExecutor();
   });

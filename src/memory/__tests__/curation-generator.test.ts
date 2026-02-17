@@ -6,7 +6,8 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdir, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { TaskStore } from "../../store/task-store.js";
+import { FilesystemTaskStore } from "../../store/task-store.js";
+import type { ITaskStore } from "../../store/interfaces.js";
 import {
   selectThreshold,
   generateCurationTasks,
@@ -62,13 +63,13 @@ describe("selectThreshold", () => {
 describe("generateCurationTasks", () => {
   let testDir: string;
   let projectRoot: string;
-  let store: TaskStore;
+  let store: ITaskStore;
 
   beforeEach(async () => {
     testDir = join(tmpdir(), `aof-test-${Date.now()}`);
     projectRoot = join(testDir, "test-project");
     await mkdir(projectRoot, { recursive: true });
-    store = new TaskStore(projectRoot);
+    store = new FilesystemTaskStore(projectRoot);
     await store.init();
   });
 

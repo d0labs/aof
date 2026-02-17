@@ -5,15 +5,16 @@ import { join } from "node:path";
 import { ProtocolRouter } from "../router.js";
 import type { ProtocolEnvelope } from "../../schemas/protocol.js";
 import type { EventType } from "../../schemas/event.js";
-import { TaskStore } from "../../store/task-store.js";
+import { FilesystemTaskStore } from "../../store/task-store.js";
+import type { ITaskStore } from "../../store/interfaces.js";
 import { acquireLease } from "../../store/lease.js";
 
 let tmpDir: string;
-let store: TaskStore;
+let store: ITaskStore;
 
 beforeEach(async () => {
   tmpDir = await mkdtemp(join(tmpdir(), "aof-handoff-test-"));
-  store = new TaskStore(tmpDir);
+  store = new FilesystemTaskStore(tmpDir);
   await store.init();
 });
 

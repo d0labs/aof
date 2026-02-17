@@ -6,7 +6,7 @@
  * time has passed since the last run. Includes deduplication logic.
  */
 
-import type { TaskStore } from "../store/task-store.js";
+import type { ITaskStore } from "../store/interfaces.js";
 import type { Task } from "../schemas/task.js";
 import type {
   CurationPolicy,
@@ -78,7 +78,7 @@ export function selectThreshold(
  * Check if an open curation task exists for the given scope.
  */
 async function hasOpenCurationTask(
-  store: TaskStore,
+  store: ITaskStore,
   scopeId: string
 ): Promise<boolean> {
   const openStatuses = ["backlog", "ready", "in-progress", "blocked", "review"];
@@ -100,7 +100,7 @@ async function hasOpenCurationTask(
  * Get the last completed curation task for a scope.
  */
 async function getLastDoneCurationTask(
-  store: TaskStore,
+  store: ITaskStore,
   scopeId: string
 ): Promise<Task | null> {
   const doneTasks = await store.list({ status: "done" });
@@ -206,7 +206,7 @@ ${strategy === "compress" ? "- Compress/summarize entries to reduce size" : ""}
  * Generate curation tasks for the given scopes.
  */
 export async function generateCurationTasks(
-  store: TaskStore,
+  store: ITaskStore,
   policy: CurationPolicy,
   scopes: CurationScope[],
   backend: MemoryBackend,

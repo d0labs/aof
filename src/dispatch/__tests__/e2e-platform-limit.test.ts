@@ -2,19 +2,20 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { TaskStore } from "../../store/task-store.js";
+import { FilesystemTaskStore } from "../../store/task-store.js";
+import type { ITaskStore } from "../../store/interfaces.js";
 import { EventLogger } from "../../events/logger.js";
 import { poll } from "../scheduler.js";
 import type { DispatchExecutor, ExecutorResult, TaskContext } from "../executor.js";
 
 describe("E2E - Platform Limit Detection", () => {
   let tmpDir: string;
-  let store: TaskStore;
+  let store: ITaskStore;
   let logger: EventLogger;
   
   beforeEach(async () => {
     tmpDir = await mkdtemp(join(tmpdir(), "aof-e2e-platform-"));
-    store = new TaskStore(tmpDir, { projectId: "test-project" });
+    store = new FilesystemTaskStore(tmpDir, { projectId: "test-project" });
     await store.init();
     logger = new EventLogger(join(tmpDir, "events"));
   });

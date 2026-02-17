@@ -9,7 +9,7 @@
 
 import { join } from "node:path";
 import writeFileAtomic from "write-file-atomic";
-import type { TaskStore } from "../store/task-store.js";
+import type { ITaskStore } from "../store/interfaces.js";
 import type { EventLogger } from "../events/logger.js";
 import type { Task } from "../schemas/task.js";
 import { serializeTask } from "../store/task-store.js";
@@ -21,7 +21,7 @@ const MAX_DISPATCH_FAILURES = 3;
  * Increments dispatchFailures counter and records failure reason.
  */
 export async function trackDispatchFailure(
-  store: TaskStore,
+  store: ITaskStore,
   taskId: string,
   reason: string
 ): Promise<void> {
@@ -60,7 +60,7 @@ export function shouldTransitionToDeadletter(task: Task): boolean {
  * - Emits ops alert (console + events.jsonl)
  */
 export async function transitionToDeadletter(
-  store: TaskStore,
+  store: ITaskStore,
   eventLogger: EventLogger,
   taskId: string,
   lastFailureReason: string
@@ -99,7 +99,7 @@ export async function transitionToDeadletter(
  * Reset dispatch failure count (used when resurrecting a task).
  */
 export async function resetDispatchFailures(
-  store: TaskStore,
+  store: ITaskStore,
   taskId: string
 ): Promise<void> {
   const task = await store.get(taskId);

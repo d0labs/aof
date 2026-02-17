@@ -12,13 +12,14 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdtemp, rm, mkdir, writeFile, readFile, readdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { TaskStore } from "../../store/task-store.js";
+import { FilesystemTaskStore } from "../../store/task-store.js";
+import type { ITaskStore } from "../../store/interfaces.js";
 import { EventLogger } from "../../events/logger.js";
 import { resurrectTask } from "../task-resurrect.js";
 
 describe("Task Resurrection", () => {
   let testDir: string;
-  let store: TaskStore;
+  let store: ITaskStore;
   let eventLogger: EventLogger;
 
   beforeEach(async () => {
@@ -31,7 +32,7 @@ describe("Task Resurrection", () => {
     await mkdir(join(testDir, "events"), { recursive: true });
     
     // Initialize store and event logger
-    store = new TaskStore(testDir, { projectId: "test" });
+    store = new FilesystemTaskStore(testDir, { projectId: "test" });
     eventLogger = new EventLogger(join(testDir, "events"));
   });
 

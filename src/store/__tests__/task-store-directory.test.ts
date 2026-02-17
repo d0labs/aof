@@ -12,16 +12,17 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdtemp, rm, mkdir, writeFile, readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { TaskStore, serializeTask } from "../task-store.js";
+import { FilesystemTaskStore, serializeTask } from "../task-store.js";
+import type { ITaskStore } from "../interfaces.js";
 import type { Task } from "../../schemas/task.js";
 
 describe("TaskStore Directory Support", () => {
   let tmpDir: string;
-  let store: TaskStore;
+  let store: ITaskStore;
 
   beforeEach(async () => {
     tmpDir = await mkdtemp(join(tmpdir(), "aof-taskstore-dir-test-"));
-    store = new TaskStore(tmpDir);
+    store = new FilesystemTaskStore(tmpDir);
     await store.init();
   });
 

@@ -6,13 +6,14 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { mkdtemp, rm, mkdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { TaskStore } from "../../../store/task-store.js";
+import { FilesystemTaskStore } from "../../../store/task-store.js";
+import type { ITaskStore } from "../../../store/interfaces.js";
 import { EventLogger } from "../../../events/logger.js";
 import { taskClose } from "../task-close.js";
 
 describe("Task Close Command", () => {
   let testDir: string;
-  let store: TaskStore;
+  let store: ITaskStore;
   let eventLogger: EventLogger;
   let consoleLogSpy: ReturnType<typeof vi.spyOn>;
   let consoleErrorSpy: ReturnType<typeof vi.spyOn>;
@@ -26,7 +27,7 @@ describe("Task Close Command", () => {
     await mkdir(join(testDir, "events"), { recursive: true });
     
     eventLogger = new EventLogger(join(testDir, "events"));
-    store = new TaskStore(testDir, { projectId: "test", logger: eventLogger });
+    store = new FilesystemTaskStore(testDir, { projectId: "test", logger: eventLogger });
     
     consoleLogSpy = vi.spyOn(console, "log").mockImplementation(() => {});
     consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});

@@ -2,13 +2,13 @@
  * Metrics collector — gathers MetricsState from the task store.
  */
 
-import { TaskStore } from "../store/task-store.js";
+import type { ITaskStore } from "../store/interfaces.js";
 import type { MetricsState } from "./exporter.js";
 
 /**
  * Collect current metrics state from the task store.
  */
-export async function collectMetrics(store: TaskStore): Promise<MetricsState> {
+export async function collectMetrics(store: ITaskStore): Promise<MetricsState> {
   const allTasks = await store.list();
 
   // Task counts by status

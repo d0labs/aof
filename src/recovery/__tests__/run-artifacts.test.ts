@@ -2,7 +2,8 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdtemp, rm, writeFile, mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { TaskStore } from "../../store/task-store.js";
+import { FilesystemTaskStore } from "../../store/task-store.js";
+import type { ITaskStore } from "../../store/interfaces.js";
 import { acquireLease } from "../../store/lease.js";
 import {
   writeRunArtifact,
@@ -17,11 +18,11 @@ import {
 
 describe("run artifacts", () => {
   let tmpDir: string;
-  let store: TaskStore;
+  let store: ITaskStore;
 
   beforeEach(async () => {
     tmpDir = await mkdtemp(join(tmpdir(), "aof-run-test-"));
-    store = new TaskStore(tmpDir);
+    store = new FilesystemTaskStore(tmpDir);
     await store.init();
   });
 

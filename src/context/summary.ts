@@ -15,7 +15,7 @@
 
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import type { TaskStore } from "../store/task-store.js";
+import type { ITaskStore } from "../store/interfaces.js";
 
 /**
  * Sub-agent summary structure.

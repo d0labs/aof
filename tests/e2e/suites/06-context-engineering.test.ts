@@ -10,7 +10,8 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { TaskStore } from "../../../src/store/task-store.js";
+import { FilesystemTaskStore } from "../../../src/store/task-store.js";
+import type { ITaskStore } from "../../../src/store/interfaces.js";
 import { assembleContext, type ContextManifest } from "../../../src/context/assembler.js";
 import { evaluateBudget } from "../../../src/context/budget.js";
 import { calculateFootprint, generateTransparencyReport } from "../../../src/context/steward.js";
@@ -23,12 +24,12 @@ import { mkdir, writeFile } from "node:fs/promises";
 const TEST_DATA_DIR = join(homedir(), ".openclaw-aof-e2e-test", "context-engineering");
 
 describe("E2E: Context Engineering", () => {
-  let store: TaskStore;
+  let store: ITaskStore;
 
   beforeEach(async () => {
     await cleanupTestData(TEST_DATA_DIR);
     await seedTestData(TEST_DATA_DIR);
-    store = new TaskStore(TEST_DATA_DIR);
+    store = new FilesystemTaskStore(TEST_DATA_DIR);
   });
 
   afterEach(async () => {

@@ -22,7 +22,8 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { TaskStore } from "../../../src/store/task-store.js";
+import { FilesystemTaskStore } from "../../../src/store/task-store.js";
+import type { ITaskStore } from "../../../src/store/interfaces.js";
 import { EventLogger } from "../../../src/events/logger.js";
 import { handleGateTransition } from "../../../src/dispatch/gate-transition-handler.js";
 import { poll } from "../../../src/dispatch/scheduler.js";
@@ -41,7 +42,7 @@ const TEST_DATA_DIR = join(homedir(), ".openclaw-aof-e2e-test", "workflow-gate-i
  * Helper: Create a task with gate workflow routing
  */
 async function createGateTask(
-  store: TaskStore,
+  store: ITaskStore,
   title: string,
   workflowName: string,
   initialGate: string,
@@ -91,7 +92,7 @@ async function createGateTask(
  * Helper: Complete a gate with outcome
  */
 async function completeGate(
-  store: TaskStore,
+  store: ITaskStore,
   logger: EventLogger,
   taskId: string,
   outcome: "complete" | "needs_review" | "blocked",
@@ -109,7 +110,7 @@ async function completeGate(
 /**
  * Helper: Reload task from store
  */
-async function reloadTask(store: TaskStore, taskId: string): Promise<Task> {
+async function reloadTask(store: ITaskStore, taskId: string): Promise<Task> {
   const task = await store.get(taskId);
   if (!task) {
     throw new Error(`Task ${taskId} not found`);
@@ -118,14 +119,14 @@ async function reloadTask(store: TaskStore, taskId: string): Promise<Task> {
 }
 
 describe("E2E: Workflow Gate Integration", () => {
-  let store: TaskStore;
+  let store: ITaskStore;
   let logger: EventLogger;
   let metrics: AOFMetrics;
 
   beforeEach(async () => {
     await cleanupTestData(TEST_DATA_DIR);
     await seedTestData(TEST_DATA_DIR);
-    store = new TaskStore(TEST_DATA_DIR);
+    store = new FilesystemTaskStore(TEST_DATA_DIR);
     logger = new EventLogger(join(TEST_DATA_DIR, "events"));
     metrics = new AOFMetrics();
   });

@@ -6,7 +6,8 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdtemp, rm, writeFile, readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { TaskStore } from "../../store/task-store.js";
+import { FilesystemTaskStore } from "../../store/task-store.js";
+import type { ITaskStore } from "../../store/interfaces.js";
 import { EventLogger } from "../../events/logger.js";
 import {
   seedTasks,
@@ -17,12 +18,12 @@ import {
 
 describe("Task Seeder", () => {
   let tmpDir: string;
-  let store: TaskStore;
+  let store: ITaskStore;
   let logger: EventLogger;
 
   beforeEach(async () => {
     tmpDir = await mkdtemp(join(tmpdir(), "seeder-test-"));
-    store = new TaskStore(tmpDir);
+    store = new FilesystemTaskStore(tmpDir);
     await store.init();
     logger = new EventLogger(join(tmpDir, "events"));
   });

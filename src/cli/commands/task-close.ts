@@ -4,7 +4,7 @@
  * Supports --recover-on-failure flag for automatic recovery on failure.
  */
 
-import type { TaskStore } from "../../store/task-store.js";
+import type { ITaskStore } from "../../store/interfaces.js";
 import type { EventLogger } from "../../events/logger.js";
 import { attemptRecovery, formatRecoverySummary } from "../recovery.js";
 
@@ -21,7 +21,7 @@ export interface TaskCloseOptions {
  * @param options - Command options
  */
 export async function taskClose(
-  store: TaskStore,
+  store: ITaskStore,
   eventLogger: EventLogger,
   taskId: string,
   options: TaskCloseOptions = {}

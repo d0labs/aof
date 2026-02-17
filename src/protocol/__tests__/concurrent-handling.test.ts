@@ -2,7 +2,8 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdtemp, rm, mkdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { TaskStore } from "../../store/task-store.js";
+import { FilesystemTaskStore } from "../../store/task-store.js";
+import type { ITaskStore } from "../../store/interfaces.js";
 import { EventLogger } from "../../events/logger.js";
 import { MockNotificationAdapter, NotificationService } from "../../events/notifier.js";
 import { ProtocolRouter } from "../router.js";
@@ -53,7 +54,7 @@ const makeStatusEnvelope = (taskId: string, notes: string): ProtocolEnvelope => 
 
 describe("Concurrent protocol message handling", () => {
   let tmpDir: string;
-  let store: TaskStore;
+  let store: ITaskStore;
   let logger: EventLogger;
   let adapter: MockNotificationAdapter;
   let notifier: NotificationService;
@@ -71,7 +72,7 @@ describe("Concurrent protocol message handling", () => {
 
   beforeEach(async () => {
     tmpDir = await mkdtemp(join(tmpdir(), "aof-concurrent-test-"));
-    store = new TaskStore(tmpDir);
+    store = new FilesystemTaskStore(tmpDir);
     await store.init();
 
     const eventsDir = join(tmpDir, "events");

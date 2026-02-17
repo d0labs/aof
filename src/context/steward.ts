@@ -7,7 +7,7 @@
 
 import { readFile, readdir, stat } from "node:fs/promises";
 import { join } from "node:path";
-import type { TaskStore } from "../store/task-store.js";
+import type { ITaskStore } from "../store/interfaces.js";
 import type { OrgChart } from "../schemas/org-chart.js";
 import type { ContextBudgetPolicy } from "./budget.js";
 import { estimateTokens } from "./budget.js";
@@ -50,7 +50,7 @@ export interface TransparencyReport {
  */
 export async function calculateFootprint(
   agentId: string,
-  store: TaskStore,
+  store: ITaskStore,
   opts?: { includeOutputs?: boolean }
 ): Promise<AgentFootprint> {
   const tasks = await store.list();
@@ -149,7 +149,7 @@ export async function calculateFootprint(
  * If orgChart is provided, includes agents with zero footprint.
  */
 export async function calculateAllFootprints(
-  store: TaskStore,
+  store: ITaskStore,
   orgChart?: OrgChart
 ): Promise<AgentFootprint[]> {
   // Get unique agent IDs from tasks

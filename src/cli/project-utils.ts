@@ -5,7 +5,8 @@
  */
 
 import { join } from "node:path";
-import { TaskStore } from "../store/task-store.js";
+import { FilesystemTaskStore } from "../store/task-store.js";
+import type { ITaskStore } from "../store/interfaces.js";
 import { EventLogger } from "../events/logger.js";
 import { resolveProject } from "../projects/resolver.js";
 
@@ -26,11 +27,11 @@ export interface CreateStoreOptions {
  */
 export async function createProjectStore(
   opts: CreateStoreOptions = {}
-): Promise<{ store: TaskStore; projectRoot: string; vaultRoot: string }> {
+): Promise<{ store: ITaskStore; projectRoot: string; vaultRoot: string }> {
   const projectId = opts.projectId ?? "_inbox";
   const resolution = await resolveProject(projectId, opts.vaultRoot);
 
-  const store = new TaskStore(resolution.projectRoot, {
+  const store = new FilesystemTaskStore(resolution.projectRoot, {
     projectId: resolution.projectId,
     logger: opts.logger,
   });

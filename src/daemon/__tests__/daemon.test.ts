@@ -3,14 +3,15 @@ import { mkdtemp, rm, mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
-import { TaskStore } from "../../store/task-store.js";
+import { FilesystemTaskStore } from "../../store/task-store.js";
+import type { ITaskStore } from "../../store/interfaces.js";
 import { EventLogger } from "../../events/logger.js";
 import { startAofDaemon } from "../daemon.js";
 import type { PollResult } from "../../dispatch/scheduler.js";
 
 describe("AOF daemon", () => {
   let tmpDir: string;
-  let store: TaskStore;
+  let store: ITaskStore;
   let logger: EventLogger;
 
   const makePollResult = (): PollResult => ({
@@ -31,7 +32,7 @@ describe("AOF daemon", () => {
 
   beforeEach(async () => {
     tmpDir = await mkdtemp(join(tmpdir(), "aof-daemon-test-"));
-    store = new TaskStore(tmpDir);
+    store = new FilesystemTaskStore(tmpDir);
     await store.init();
     const eventsDir = join(tmpDir, "events");
     await mkdir(eventsDir, { recursive: true });

@@ -5,14 +5,14 @@
  * This is the recommended entry point for dispatching tasks with full context.
  */
 
-import type { TaskStore } from "../store/task-store.js";
+import type { ITaskStore } from "../store/interfaces.js";
 import type { DispatchExecutor } from "./executor.js";
 import { assembleContext, type ContextBundle, type AssembleOptions } from "../context/assembler.js";
 
 export interface AofDispatchOptions {
   taskId: string;
   agentId?: string;              // Override agent; otherwise from task routing
-  store: TaskStore;
+  store: ITaskStore;
   executor: DispatchExecutor;
   contextOpts?: AssembleOptions; // maxChars, etc.
 }

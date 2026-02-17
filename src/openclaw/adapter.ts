@@ -1,5 +1,6 @@
 import { join } from "node:path";
-import { TaskStore } from "../store/task-store.js";
+import { FilesystemTaskStore } from "../store/task-store.js";
+import type { ITaskStore } from "../store/interfaces.js";
 import { EventLogger } from "../events/logger.js";
 import { AOFMetrics } from "../metrics/exporter.js";
 import { AOFService } from "../service/aof-service.js";
@@ -18,7 +19,7 @@ export interface AOFPluginOptions {
   gatewayUrl?: string;
   gatewayToken?: string;
   maxConcurrentDispatches?: number;
-  store?: TaskStore;
+  store?: ITaskStore;
   logger?: EventLogger;
   metrics?: AOFMetrics;
   service?: AOFService;
@@ -30,7 +31,7 @@ export interface AOFPluginOptions {
 const SERVICE_NAME = "aof-scheduler";
 
 export function registerAofPlugin(api: OpenClawApi, opts: AOFPluginOptions): AOFService {
-  const store = opts.store ?? new TaskStore(opts.dataDir);
+  const store = opts.store ?? new FilesystemTaskStore(opts.dataDir);
   const logger = opts.logger ?? new EventLogger(join(opts.dataDir, "events"));
   const metrics = opts.metrics ?? new AOFMetrics();
 

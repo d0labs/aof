@@ -8,14 +8,15 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { mkdtemp, rm, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { TaskStore } from "../task-store.js";
+import { FilesystemTaskStore } from "../task-store.js";
+import type { ITaskStore } from "../interfaces.js";
 import { EventLogger } from "../../events/logger.js";
 import type { TaskStatus } from "../../schemas/task.js";
 import type { BaseEvent } from "../../schemas/event.js";
 
 describe("BUG-002: Task lifecycle event emission", () => {
   let tmpDir: string;
-  let store: TaskStore;
+  let store: ITaskStore;
   let logger: EventLogger;
   let capturedEvents: BaseEvent[];
 
@@ -31,7 +32,7 @@ describe("BUG-002: Task lifecycle event emission", () => {
     });
     
     // Create TaskStore with hooks that emit events
-    store = new TaskStore(tmpDir, {
+    store = new FilesystemTaskStore(tmpDir, {
       hooks: {
         afterTransition: async (task, previousStatus) => {
           await logger.logTransition(
@@ -151,7 +152,7 @@ describe("BUG-002: Task lifecycle event emission", () => {
   it("afterTransition hook is called with correct parameters", async () => {
     const hookSpy = vi.fn();
     
-    const storeWithSpy = new TaskStore(tmpDir, {
+    const storeWithSpy = new FilesystemTaskStore(tmpDir, {
       hooks: {
         afterTransition: hookSpy,
       },

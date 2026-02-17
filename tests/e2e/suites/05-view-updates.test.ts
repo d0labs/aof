@@ -9,7 +9,8 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { TaskStore } from "../../../src/store/task-store.js";
+import { FilesystemTaskStore } from "../../../src/store/task-store.js";
+import type { ITaskStore } from "../../../src/store/interfaces.js";
 import { syncKanbanView } from "../../../src/views/kanban.js";
 import { syncMailboxView } from "../../../src/views/mailbox.js";
 import { parseViewSnapshot } from "../../../src/views/parser.js";
@@ -21,13 +22,13 @@ import { mkdir } from "node:fs/promises";
 const TEST_DATA_DIR = join(homedir(), ".openclaw-aof-e2e-test", "view-updates");
 
 describe("E2E: View Updates", () => {
-  let store: TaskStore;
+  let store: ITaskStore;
   let viewsDir: string;
 
   beforeEach(async () => {
     await cleanupTestData(TEST_DATA_DIR);
     await seedTestData(TEST_DATA_DIR);
-    store = new TaskStore(TEST_DATA_DIR);
+    store = new FilesystemTaskStore(TEST_DATA_DIR);
     viewsDir = join(TEST_DATA_DIR, "views");
     await mkdir(viewsDir, { recursive: true });
   });

@@ -12,7 +12,8 @@
  */
 
 import type { TaskLease } from "../schemas/task.js";
-import { TaskStore, serializeTask } from "./task-store.js";
+import { FilesystemTaskStore, serializeTask } from "./task-store.js";
+import type { ITaskStore } from "./interfaces.js";
 import { writeRunArtifact, writeHeartbeat } from "../recovery/run-artifacts.js";
 import writeFileAtomic from "write-file-atomic";
 
@@ -35,18 +36,18 @@ const DEFAULT_LEASE_OPTIONS: LeaseOptions = {
 };
 
 /** Write a task back atomically to its current location. */
-async function writeBack(store: TaskStore, task: { frontmatter: { id: string; status: string }; path?: string }, serialized: string): Promise<void> {
+async function writeBack(store: ITaskStore, task: { frontmatter: { id: string; status: string }; path?: string }, serialized: string): Promise<void> {
   const filePath = task.path!;
   await writeFileAtomic(filePath, serialized);
 }
 
 /** Acquire a lease on a task for an agent. */
 export async function acquireLease(
-  store: TaskStore,
+  store: ITaskStore,
   taskId: string,
   agentId: string,
   opts: Partial<LeaseOptions> = {},
-): Promise<ReturnType<TaskStore["get"]>> {
+): Promise<ReturnType<ITaskStore["get"]>> {
   const { ttlMs } = { ...DEFAULT_LEASE_OPTIONS, ...opts };
 
   const task = await store.get(taskId);
@@ -103,11 +104,11 @@ export async function acquireLease(
 
 /** Renew an existing lease. */
 export async function renewLease(
-  store: TaskStore,
+  store: ITaskStore,
   taskId: string,
   agentId: string,
   opts: Partial<LeaseOptions> = {},
-): Promise<ReturnType<TaskStore["get"]>> {
+): Promise<ReturnType<ITaskStore["get"]>> {
   const { ttlMs, maxRenewals } = { ...DEFAULT_LEASE_OPTIONS, ...opts };
 
   const task = await store.get(taskId);
@@ -135,10 +136,10 @@ export async function renewLease(
 
 /** Release a lease voluntarily. Task goes back to pending. */
 export async function releaseLease(
-  store: TaskStore,
+  store: ITaskStore,
   taskId: string,
   agentId: string,
-): Promise<ReturnType<TaskStore["get"]>> {
+): Promise<ReturnType<ITaskStore["get"]>> {
   const task = await store.get(taskId);
   if (!task) throw new Error(`Task not found: ${taskId}`);
 
@@ -155,7 +156,7 @@ export async function releaseLease(
 }
 
 /** Find and expire all tasks with expired leases. Returns expired task IDs. */
-export async function expireLeases(store: TaskStore): Promise<string[]> {
+export async function expireLeases(store: ITaskStore): Promise<string[]> {
   // BUG-AUDIT-001: Scan both in-progress AND blocked tasks for expired leases
   const inProgress = await store.list({ status: "in-progress" });
   const blocked = await store.list({ status: "blocked" });
@@ -202,7 +203,7 @@ export async function expireLeases(store: TaskStore): Promise<string[]> {
 }
 
 /** Check if all dependencies are satisfied (done). */
-async function checkDependenciesSatisfied(store: TaskStore, depIds: string[]): Promise<boolean> {
+async function checkDependenciesSatisfied(store: ITaskStore, depIds: string[]): Promise<boolean> {
   for (const depId of depIds) {
     const dep = await store.get(depId);
     if (!dep || dep.frontmatter.status !== "done") {

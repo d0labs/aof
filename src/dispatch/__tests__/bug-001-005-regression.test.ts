@@ -9,20 +9,21 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdtemp, rm, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { TaskStore } from "../../store/task-store.js";
+import { FilesystemTaskStore } from "../../store/task-store.js";
+import type { ITaskStore } from "../../store/interfaces.js";
 import { EventLogger } from "../../events/logger.js";
 import { poll } from "../scheduler.js";
 import { MockExecutor } from "../executor.js";
 
 describe("BUG-001: Scheduler Infinite Loop — Tasks Never Dispatch", () => {
   let tmpDir: string;
-  let store: TaskStore;
+  let store: ITaskStore;
   let logger: EventLogger;
   let executor: MockExecutor;
 
   beforeEach(async () => {
     tmpDir = await mkdtemp(join(tmpdir(), "bug001-test-"));
-    store = new TaskStore(tmpDir);
+    store = new FilesystemTaskStore(tmpDir);
     await store.init();
     logger = new EventLogger(join(tmpDir, "events"));
     executor = new MockExecutor();
@@ -134,13 +135,13 @@ describe("BUG-001: Scheduler Infinite Loop — Tasks Never Dispatch", () => {
 
 describe("BUG-002: Missing Dispatch Events", () => {
   let tmpDir: string;
-  let store: TaskStore;
+  let store: ITaskStore;
   let logger: EventLogger;
   let executor: MockExecutor;
 
   beforeEach(async () => {
     tmpDir = await mkdtemp(join(tmpdir(), "bug002-test-"));
-    store = new TaskStore(tmpDir);
+    store = new FilesystemTaskStore(tmpDir);
     await store.init();
     logger = new EventLogger(join(tmpDir, "events"));
     executor = new MockExecutor();
@@ -238,13 +239,13 @@ describe("BUG-002: Missing Dispatch Events", () => {
 
 describe("BUG-003: Misleading Scheduler Metrics", () => {
   let tmpDir: string;
-  let store: TaskStore;
+  let store: ITaskStore;
   let logger: EventLogger;
   let executor: MockExecutor;
 
   beforeEach(async () => {
     tmpDir = await mkdtemp(join(tmpdir(), "bug003-test-"));
-    store = new TaskStore(tmpDir);
+    store = new FilesystemTaskStore(tmpDir);
     await store.init();
     logger = new EventLogger(join(tmpDir, "events"));
     executor = new MockExecutor();
@@ -344,13 +345,13 @@ describe("BUG-003: Misleading Scheduler Metrics", () => {
 
 describe("BUG-005: Zero In-Progress Tasks During Active Polling", () => {
   let tmpDir: string;
-  let store: TaskStore;
+  let store: ITaskStore;
   let logger: EventLogger;
   let executor: MockExecutor;
 
   beforeEach(async () => {
     tmpDir = await mkdtemp(join(tmpdir(), "bug005-test-"));
-    store = new TaskStore(tmpDir);
+    store = new FilesystemTaskStore(tmpDir);
     await store.init();
     logger = new EventLogger(join(tmpDir, "events"));
     executor = new MockExecutor();

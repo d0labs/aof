@@ -11,7 +11,7 @@
 
 import { readFile } from "node:fs/promises";
 import { parse as parseYaml } from "yaml";
-import type { TaskStore } from "../store/task-store.js";
+import type { ITaskStore } from "../store/interfaces.js";
 import type { EventLogger } from "../events/logger.js";
 import { aofDispatch, type AOFDispatchInput } from "./aof-tools.js";
 import type { TaskPriority } from "../schemas/task.js";
@@ -57,7 +57,7 @@ export interface SeedResult {
  */
 export async function seedTasksFromFile(
   filePath: string,
-  store: TaskStore,
+  store: ITaskStore,
   logger: EventLogger,
   options?: {
     actor?: string;
@@ -136,7 +136,7 @@ export async function seedTasksFromFile(
  */
 export async function seedTasks(
   seeds: TaskSeedEntry[],
-  store: TaskStore,
+  store: ITaskStore,
   logger: EventLogger,
   options?: {
     actor?: string;

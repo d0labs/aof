@@ -2,7 +2,8 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdtemp, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { TaskStore, serializeTask } from "../../store/task-store.js";
+import { FilesystemTaskStore, serializeTask } from "../../store/task-store.js";
+import type { ITaskStore } from "../../store/interfaces.js";
 import { EventLogger } from "../../events/logger.js";
 import { AOFMetrics } from "../../metrics/exporter.js";
 import { handleGateTransition } from "../gate-transition-handler.js";
@@ -10,13 +11,13 @@ import writeFileAtomic from "write-file-atomic";
 
 describe("Gate Metrics Integration", () => {
   let tmpDir: string;
-  let store: TaskStore;
+  let store: ITaskStore;
   let logger: EventLogger;
   let metrics: AOFMetrics;
 
   beforeEach(async () => {
     tmpDir = await mkdtemp(join(tmpdir(), "gate-metrics-test-"));
-    store = new TaskStore(tmpDir, "test-project");
+    store = new FilesystemTaskStore(tmpDir, "test-project");
     await store.init();
     logger = new EventLogger(tmpDir);
     metrics = new AOFMetrics();

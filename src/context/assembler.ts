@@ -8,7 +8,7 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { stringify as stringifyYaml } from "yaml";
-import type { TaskStore } from "../store/task-store.js";
+import type { ITaskStore } from "../store/interfaces.js";
 import { FilesystemResolver, ResolverChain } from "./resolvers.js";
 import { loadManifest, generateDefaultManifest } from "./manifest.js";
 
@@ -45,7 +45,7 @@ export interface AssembleOptions {
  */
 export async function assembleContext(
   taskId: string,
-  store: TaskStore,
+  store: ITaskStore,
   opts?: AssembleOptions
 ): Promise<ContextBundle> {
   const task = await store.get(taskId);

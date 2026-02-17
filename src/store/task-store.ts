@@ -16,6 +16,7 @@ import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
 import writeFileAtomic from "write-file-atomic";
 import { TaskFrontmatter, Task, isValidTransition } from "../schemas/task.js";
 import type { TaskStatus } from "../schemas/task.js";
+import type { ITaskStore } from "./interfaces.js";
 
 const FRONTMATTER_FENCE = "---";
 
@@ -135,7 +136,7 @@ function formatTaskDate(date: Date): string {
  * Layout: projectRoot/tasks/<status>/<id>.md
  * Moving a file between status dirs = atomic state transition.
  */
-export class TaskStore {
+export class FilesystemTaskStore implements ITaskStore {
   readonly projectRoot: string;
   readonly projectId: string;
   readonly tasksDir: string;

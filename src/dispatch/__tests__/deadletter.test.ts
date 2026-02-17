@@ -12,14 +12,15 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { mkdtemp, rm, mkdir, writeFile, readFile, readdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { TaskStore } from "../../store/task-store.js";
+import { FilesystemTaskStore } from "../../store/task-store.js";
+import type { ITaskStore } from "../../store/interfaces.js";
 import { EventLogger } from "../../events/logger.js";
 import { trackDispatchFailure, shouldTransitionToDeadletter, transitionToDeadletter } from "../failure-tracker.js";
 import type { Task } from "../../schemas/task.js";
 
 describe("Dispatch Failure Tracking", () => {
   let testDir: string;
-  let store: TaskStore;
+  let store: ITaskStore;
   let eventLogger: EventLogger;
 
   beforeEach(async () => {
@@ -33,7 +34,7 @@ describe("Dispatch Failure Tracking", () => {
     
     // Initialize store and event logger
     // TaskStore expects projectRoot (parent of tasks/), not tasks/ itself
-    store = new TaskStore(testDir, { projectId: "test" });
+    store = new FilesystemTaskStore(testDir, { projectId: "test" });
     eventLogger = new EventLogger(join(testDir, "events"));
   });
 

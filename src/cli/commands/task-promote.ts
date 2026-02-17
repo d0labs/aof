@@ -4,7 +4,7 @@
  * Validates promotion eligibility unless --force is used.
  */
 
-import type { TaskStore } from "../../store/task-store.js";
+import type { ITaskStore } from "../../store/interfaces.js";
 import type { EventLogger } from "../../events/logger.js";
 import type { Task } from "../../schemas/task.js";
 
@@ -91,7 +91,7 @@ function buildChildrenMap(tasks: Task[]): Map<string, Task[]> {
  * @param options - Command options
  */
 export async function taskPromote(
-  store: TaskStore,
+  store: ITaskStore,
   eventLogger: EventLogger,
   taskId: string,
   options: TaskPromoteOptions = {}

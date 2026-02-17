@@ -9,12 +9,13 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdtemp, rm, writeFile, mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { TaskStore, serializeTask } from "../task-store.js";
+import { FilesystemTaskStore, serializeTask } from "../task-store.js";
+import type { ITaskStore } from "../interfaces.js";
 import type { Task } from "../../schemas/task.js";
 
 describe("BUG-001: TaskStore hydration from disk", () => {
   let tmpDir: string;
-  let store: TaskStore;
+  let store: ITaskStore;
 
   beforeEach(async () => {
     tmpDir = await mkdtemp(join(tmpdir(), "aof-bug001-"));
@@ -53,7 +54,7 @@ describe("BUG-001: TaskStore hydration from disk", () => {
     await writeFile(filePath, serializeTask(task));
 
     // NOW initialize TaskStore — should discover the file
-    store = new TaskStore(tmpDir);
+    store = new FilesystemTaskStore(tmpDir);
     await store.init();
 
     // Verify task is visible via list()
@@ -104,7 +105,7 @@ describe("BUG-001: TaskStore hydration from disk", () => {
     );
 
     // Initialize and verify all 3 tasks are discovered
-    store = new TaskStore(tmpDir);
+    store = new FilesystemTaskStore(tmpDir);
     await store.init();
 
     const allTasks = await store.list();
@@ -154,7 +155,7 @@ describe("BUG-001: TaskStore hydration from disk", () => {
       serializeTask(validTask),
     );
 
-    store = new TaskStore(tmpDir);
+    store = new FilesystemTaskStore(tmpDir);
     await store.init();
 
     // Should load only the valid task
@@ -207,7 +208,7 @@ describe("BUG-001: TaskStore hydration from disk", () => {
       serializeTask(createTask("TASK-2026-02-08-003", "ready")),
     );
 
-    store = new TaskStore(tmpDir);
+    store = new FilesystemTaskStore(tmpDir);
     await store.init();
 
     const allTasks = await store.list();

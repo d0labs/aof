@@ -2,19 +2,20 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdtemp, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { TaskStore } from "../../store/task-store.js";
+import { FilesystemTaskStore } from "../../store/task-store.js";
+import type { ITaskStore } from "../../store/interfaces.js";
 import { startMetricsServer, AOFMetrics } from "../../metrics/exporter.js";
 import { collectMetrics } from "../../metrics/collector.js";
 import type { Server } from "node:http";
 
 describe("metrics HTTP server", () => {
   let tmpDir: string;
-  let store: TaskStore;
+  let store: ITaskStore;
   let server: Server;
 
   beforeEach(async () => {
     tmpDir = await mkdtemp(join(tmpdir(), "aof-metrics-cli-test-"));
-    store = new TaskStore(tmpDir);
+    store = new FilesystemTaskStore(tmpDir);
     await store.init();
   });
 

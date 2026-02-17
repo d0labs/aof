@@ -17,7 +17,8 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdtemp, rm, mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { TaskStore } from "../../store/task-store.js";
+import { FilesystemTaskStore } from "../../store/task-store.js";
+import type { ITaskStore } from "../../store/interfaces.js";
 import { EventLogger } from "../../events/logger.js";
 import type { BaseEvent } from "../../schemas/event.js";
 import { poll } from "../../dispatch/scheduler.js";
@@ -25,7 +26,7 @@ import { MockExecutor } from "../../dispatch/executor.js";
 
 describe("BUG-003: Scheduler stall (ready → in-progress transition)", () => {
   let tmpDir: string;
-  let store: TaskStore;
+  let store: ITaskStore;
   let logger: EventLogger;
   let eventsDir: string;
   let capturedEvents: BaseEvent[];
@@ -43,7 +44,7 @@ describe("BUG-003: Scheduler stall (ready → in-progress transition)", () => {
       },
     });
     
-    store = new TaskStore(tmpDir, { logger });
+    store = new FilesystemTaskStore(tmpDir, { logger });
     await store.init();
   });
 

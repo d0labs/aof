@@ -12,7 +12,7 @@ import { tmpdir } from "node:os";
 import { stringify as stringifyYaml } from "yaml";
 import { AOFService } from "../aof-service.js";
 import type { DispatchExecutor, TaskContext, ExecutorResult } from "../../dispatch/executor.js";
-import { TaskStore } from "../../store/task-store.js";
+import { FilesystemTaskStore } from "../../store/task-store.js";
 
 class TestExecutor implements DispatchExecutor {
   readonly spawned: TaskContext[] = [];
@@ -253,7 +253,7 @@ Test task for multi-project polling.
 
   it("falls back to single-store mode when vaultRoot not provided", async () => {
     const dataDir = join(tmpDir, "single-store-data");
-    const store = new TaskStore(dataDir, { projectId: "single-store-data" });
+    const store = new FilesystemTaskStore(dataDir, { projectId: "single-store-data" });
     await store.init();
 
     await createTask(dataDir, "TASK-2026-02-12-010", {

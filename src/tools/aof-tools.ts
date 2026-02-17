@@ -1,11 +1,12 @@
-import { TaskStore } from "../store/task-store.js";
+import { FilesystemTaskStore } from "../store/task-store.js";
+import type { ITaskStore } from "../store/interfaces.js";
 import { EventLogger } from "../events/logger.js";
 import type { TaskStatus, TaskPriority } from "../schemas/task.js";
 import { wrapResponse, compactResponse, type ToolResponseEnvelope } from "./envelope.js";
 import { handleGateTransition } from "../dispatch/gate-transition-handler.js";
 
 export interface ToolContext {
-  store: TaskStore;
+  store: ITaskStore;
   logger: EventLogger;
 }
 
@@ -75,7 +76,7 @@ export interface AOFStatusReportResult extends ToolResponseEnvelope {
   tasks: Array<{ id: string; title: string; status: TaskStatus; agent?: string }>;
 }
 
-async function resolveTask(store: TaskStore, taskId: string) {
+async function resolveTask(store: ITaskStore, taskId: string) {
   const task = await store.get(taskId);
   if (task) return task;
   const byPrefix = await store.getByPrefix(taskId);
@@ -104,7 +105,7 @@ function normalizePriority(priority?: string): TaskPriority {
  * @throws Error with actionable teaching message if validation fails
  */
 async function validateGateCompletion(
-  store: TaskStore,
+  store: ITaskStore,
   task: import("../schemas/task.js").Task,
   input: AOFTaskCompleteInput
 ): Promise<void> {

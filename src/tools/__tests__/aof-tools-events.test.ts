@@ -8,14 +8,15 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdtemp, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { TaskStore } from "../../store/task-store.js";
+import { FilesystemTaskStore } from "../../store/task-store.js";
+import type { ITaskStore } from "../../store/interfaces.js";
 import { EventLogger } from "../../events/logger.js";
 import { aofDispatch, aofTaskUpdate, aofTaskComplete } from "../aof-tools.js";
 import type { BaseEvent } from "../../schemas/event.js";
 
 describe("BUG-002: AOF tool event emission", () => {
   let tmpDir: string;
-  let store: TaskStore;
+  let store: ITaskStore;
   let logger: EventLogger;
   let capturedEvents: BaseEvent[];
 
@@ -31,7 +32,7 @@ describe("BUG-002: AOF tool event emission", () => {
     });
     
     // Create TaskStore with transition hook
-    store = new TaskStore(tmpDir, {
+    store = new FilesystemTaskStore(tmpDir, {
       hooks: {
         afterTransition: async (task, previousStatus) => {
           await logger.logTransition(

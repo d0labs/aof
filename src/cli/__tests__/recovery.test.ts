@@ -13,13 +13,14 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdtemp, rm, mkdir, writeFile, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { TaskStore } from "../../store/task-store.js";
+import { FilesystemTaskStore } from "../../store/task-store.js";
+import type { ITaskStore } from "../../store/interfaces.js";
 import { EventLogger } from "../../events/logger.js";
 import { attemptRecovery, formatRecoverySummary, type RecoveryResult } from "../recovery.js";
 
 describe("CLI Recovery Logic", () => {
   let testDir: string;
-  let store: TaskStore;
+  let store: ITaskStore;
   let eventLogger: EventLogger;
 
   beforeEach(async () => {
@@ -30,7 +31,7 @@ describe("CLI Recovery Logic", () => {
     await mkdir(join(testDir, "events"), { recursive: true });
     
     eventLogger = new EventLogger(join(testDir, "events"));
-    store = new TaskStore(testDir, { projectId: "test", logger: eventLogger });
+    store = new FilesystemTaskStore(testDir, { projectId: "test", logger: eventLogger });
   });
 
   afterEach(async () => {

@@ -1,12 +1,12 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { createHealthServer, type DaemonStateProvider } from "../server.js";
-import type { TaskStore } from "../../store/task-store.js";
+import type { ITaskStore } from "../../store/interfaces.js";
 import type { Server } from "node:http";
 
 describe("Health Endpoint Server", () => {
   let server: Server;
   let mockStateProvider: DaemonStateProvider;
-  let mockStore: TaskStore;
+  let mockStore: ITaskStore;
   const testPort = 13000;
 
   beforeEach(() => {

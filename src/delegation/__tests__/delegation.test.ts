@@ -2,18 +2,19 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdtemp, rm, readFile, stat } from "node:fs/promises";
 import { join, relative, sep } from "node:path";
 import { tmpdir } from "node:os";
-import { TaskStore } from "../../store/task-store.js";
+import { FilesystemTaskStore } from "../../store/task-store.js";
+import type { ITaskStore } from "../../store/interfaces.js";
 import { syncDelegationArtifacts } from "../index.js";
 
 const toPosixPath = (value: string) => value.split(sep).join("/");
 
 describe("delegation artifacts", () => {
   let tmpDir: string;
-  let store: TaskStore;
+  let store: ITaskStore;
 
   beforeEach(async () => {
     tmpDir = await mkdtemp(join(tmpdir(), "aof-delegation-test-"));
-    store = new TaskStore(tmpDir);
+    store = new FilesystemTaskStore(tmpDir);
     await store.init();
   });
 

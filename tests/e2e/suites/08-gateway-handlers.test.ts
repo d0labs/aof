@@ -8,7 +8,8 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { TaskStore } from "../../../src/store/task-store.js";
+import { FilesystemTaskStore } from "../../../src/store/task-store.js";
+import type { ITaskStore } from "../../../src/store/interfaces.js";
 import { AOFMetrics } from "../../../src/metrics/exporter.js";
 import { AOFService } from "../../../src/service/aof-service.js";
 import { createMetricsHandler, createStatusHandler } from "../../../src/gateway/handlers.js";
@@ -20,14 +21,14 @@ import { homedir } from "node:os";
 const TEST_DATA_DIR = join(homedir(), ".openclaw-aof-e2e-test", "gateway-handlers");
 
 describe("E2E: Gateway Handlers", () => {
-  let store: TaskStore;
+  let store: ITaskStore;
   let metrics: AOFMetrics;
   let service: AOFService;
 
   beforeEach(async () => {
     await cleanupTestData(TEST_DATA_DIR);
     await seedTestData(TEST_DATA_DIR);
-    store = new TaskStore(TEST_DATA_DIR);
+    store = new FilesystemTaskStore(TEST_DATA_DIR);
     metrics = new AOFMetrics();
     service = new AOFService(
       { store, metrics },

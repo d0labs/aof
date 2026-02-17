@@ -9,7 +9,8 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { TaskStore } from "../../../src/store/task-store.js";
+import { FilesystemTaskStore } from "../../../src/store/task-store.js";
+import type { ITaskStore } from "../../../src/store/interfaces.js";
 import { aofDispatch, type DispatchResult } from "../../../src/dispatch/aof-dispatch.js";
 import type { DispatchExecutor } from "../../../src/dispatch/executor.js";
 import { seedTestData, cleanupTestData } from "../utils/test-data.js";
@@ -35,13 +36,13 @@ class MockDispatchExecutor implements DispatchExecutor {
 }
 
 describe("E2E: Dispatch Flow", () => {
-  let store: TaskStore;
+  let store: ITaskStore;
   let executor: MockDispatchExecutor;
 
   beforeEach(async () => {
     await cleanupTestData(TEST_DATA_DIR);
     await seedTestData(TEST_DATA_DIR);
-    store = new TaskStore(TEST_DATA_DIR);
+    store = new FilesystemTaskStore(TEST_DATA_DIR);
     executor = new MockDispatchExecutor();
   });
 

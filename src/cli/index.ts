@@ -9,7 +9,7 @@ import { resolve, join } from "node:path";
 import { homedir } from "node:os";
 import { readFile } from "node:fs/promises";
 import { Command } from "commander";
-import { TaskStore } from "../store/task-store.js";
+import { FilesystemTaskStore } from "../store/task-store.js";
 import { EventLogger } from "../events/logger.js";
 import { poll } from "../dispatch/scheduler.js";
 import { validateOrgChart, showOrgChart, driftCheck } from "../commands/org.js";
@@ -1058,7 +1058,7 @@ memory
     console.log();
 
     // Generate tasks
-    const taskStore = new TaskStore(resolution.projectRoot);
+    const taskStore = new FilesystemTaskStore(resolution.projectRoot);
     await taskStore.init();
 
     const { generateCurationTasks } = await import("../memory/curation-generator.js");

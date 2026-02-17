@@ -1,13 +1,14 @@
 import { join } from "node:path";
 import type { Task, TaskStatus, TaskPriority } from "../schemas/task.js";
-import { TaskStore } from "../store/task-store.js";
+import { FilesystemTaskStore } from "../store/task-store.js";
+import type { ITaskStore } from "../store/interfaces.js";
 import { EventLogger } from "../events/logger.js";
 import type { DispatchExecutor } from "../dispatch/executor.js";
 import { ErrorCode, McpError } from "@modelcontextprotocol/sdk/types.js";
 
 export interface AofMcpOptions {
   dataDir: string;
-  store?: TaskStore;
+  store?: ITaskStore;
   logger?: EventLogger;
   executor?: DispatchExecutor;
   orgChartPath?: string;
@@ -19,14 +20,14 @@ export interface AofMcpOptions {
 
 export interface AofMcpContext {
   dataDir: string;
-  store: TaskStore;
+  store: ITaskStore;
   logger: EventLogger;
   executor?: DispatchExecutor;
   orgChartPath: string;
 }
 
 export async function createAofMcpContext(options: AofMcpOptions): Promise<AofMcpContext> {
-  let store: TaskStore;
+  let store: ITaskStore;
   let dataDir: string;
   let logger: EventLogger;
   let orgChartPath: string;
@@ -44,7 +45,7 @@ export async function createAofMcpContext(options: AofMcpOptions): Promise<AofMc
     orgChartPath = options.orgChartPath ?? join(resolution.vaultRoot, "org", "org-chart.yaml");
   } else {
     // Legacy behavior: use dataDir directly
-    store = options.store ?? new TaskStore(options.dataDir);
+    store = options.store ?? new FilesystemTaskStore(options.dataDir);
     dataDir = options.dataDir;
     logger = options.logger ?? new EventLogger(join(dataDir, "events"));
     orgChartPath = options.orgChartPath ?? join(dataDir, "org", "org-chart.yaml");
@@ -59,7 +60,7 @@ export async function createAofMcpContext(options: AofMcpOptions): Promise<AofMc
   };
 }
 
-export async function resolveTask(store: TaskStore, taskId: string): Promise<Task> {
+export async function resolveTask(store: ITaskStore, taskId: string): Promise<Task> {
   const task = await store.get(taskId);
   if (task) return task;
   const byPrefix = await store.getByPrefix(taskId);

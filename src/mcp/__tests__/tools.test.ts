@@ -2,7 +2,8 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdtemp, rm, writeFile, mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { TaskStore } from "../../store/task-store.js";
+import { FilesystemTaskStore } from "../../store/task-store.js";
+import type { ITaskStore } from "../../store/interfaces.js";
 import { EventLogger } from "../../events/logger.js";
 import { createAofMcpContext } from "../shared.js";
 import {
@@ -30,11 +31,11 @@ metadata: {}
 
 describe("mcp tools", () => {
   let dataDir: string;
-  let store: TaskStore;
+  let store: ITaskStore;
 
   beforeEach(async () => {
     dataDir = await mkdtemp(join(tmpdir(), "aof-mcp-tools-"));
-    store = new TaskStore(dataDir);
+    store = new FilesystemTaskStore(dataDir);
     await store.init();
     await mkdir(join(dataDir, "org"), { recursive: true });
     await writeFile(join(dataDir, "org", "org-chart.yaml"), ORG_CHART);

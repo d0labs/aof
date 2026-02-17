@@ -2,7 +2,8 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdtemp, rm, mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { TaskStore, serializeTask } from "../../store/task-store.js";
+import { FilesystemTaskStore, serializeTask } from "../../store/task-store.js";
+import type { ITaskStore } from "../../store/interfaces.js";
 import { EventLogger } from "../../events/logger.js";
 import { poll } from "../scheduler.js";
 import writeFileAtomic from "write-file-atomic";
@@ -47,12 +48,12 @@ describe("Duration Parser", () => {
 
 describe("Gate Timeout Detection", () => {
   let tmpDir: string;
-  let store: TaskStore;
+  let store: ITaskStore;
   let logger: EventLogger;
 
   beforeEach(async () => {
     tmpDir = await mkdtemp(join(tmpdir(), "aof-gate-timeout-test-"));
-    store = new TaskStore(tmpDir);
+    store = new FilesystemTaskStore(tmpDir);
     await store.init();
     const eventsDir = join(tmpDir, "events");
     await mkdir(eventsDir, { recursive: true });

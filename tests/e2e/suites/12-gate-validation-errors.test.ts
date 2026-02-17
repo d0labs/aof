@@ -14,7 +14,8 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { TaskStore } from "../../../src/store/task-store.js";
+import { FilesystemTaskStore } from "../../../src/store/task-store.js";
+import type { ITaskStore } from "../../../src/store/interfaces.js";
 import { EventLogger } from "../../../src/events/logger.js";
 import { aofTaskComplete, type ToolContext } from "../../../src/tools/aof-tools.js";
 import { seedTestData, cleanupTestData } from "../utils/test-data.js";
@@ -25,14 +26,14 @@ import { writeFile, mkdir } from "node:fs/promises";
 const TEST_DATA_DIR = join(homedir(), ".openclaw-aof-e2e-test", "gate-validation-errors");
 
 describe("E2E: Gate Validation Errors with Teaching Messages", () => {
-  let store: TaskStore;
+  let store: ITaskStore;
   let logger: EventLogger;
   let ctx: ToolContext;
 
   beforeEach(async () => {
     await cleanupTestData(TEST_DATA_DIR);
     await seedTestData(TEST_DATA_DIR);
-    store = new TaskStore(TEST_DATA_DIR);
+    store = new FilesystemTaskStore(TEST_DATA_DIR);
     logger = new EventLogger(join(TEST_DATA_DIR, "events"));
     ctx = { store, logger };
   });

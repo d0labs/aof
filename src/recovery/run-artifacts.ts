@@ -3,20 +3,20 @@ import { join } from "node:path";
 import writeFileAtomic from "write-file-atomic";
 import { RunArtifact, RunHeartbeat, ResumeInfo } from "../schemas/run.js";
 import { RunResult } from "../schemas/run-result.js";
-import type { TaskStore } from "../store/task-store.js";
+import type { ITaskStore } from "../store/interfaces.js";
 
 /**
  * Get the companion directory for a task (where run artifacts live).
  * Run artifacts live in project-scoped state directory.
  */
-function getTaskDir(store: TaskStore, taskId: string): string | undefined {
+function getTaskDir(store: ITaskStore, taskId: string): string | undefined {
   // Run artifacts stored in project-scoped state directory
   // Path: <projectRoot>/state/runs/<taskId>/
   const runsDir = join(store.projectRoot, "state", "runs", taskId);
   return runsDir;
 }
 
-async function resolveTaskDir(store: TaskStore, taskId: string): Promise<string | undefined> {
+async function resolveTaskDir(store: ITaskStore, taskId: string): Promise<string | undefined> {
   const task = await store.get(taskId);
   if (!task) return undefined;
   
@@ -30,7 +30,7 @@ async function resolveTaskDir(store: TaskStore, taskId: string): Promise<string 
  * Write run.json artifact when task execution starts.
  */
 export async function writeRunArtifact(
-  store: TaskStore,
+  store: ITaskStore,
   taskId: string,
   agentId: string,
   metadata?: Record<string, unknown>,
@@ -64,7 +64,7 @@ export async function writeRunArtifact(
  * Read run.json artifact.
  */
 export async function readRunArtifact(
-  store: TaskStore,
+  store: ITaskStore,
   taskId: string,
 ): Promise<RunArtifact | undefined> {
   const taskDir = await resolveTaskDir(store, taskId);
@@ -84,7 +84,7 @@ export async function readRunArtifact(
  * Write run_result.json artifact when a task completes.
  */
 export async function writeRunResult(
-  store: TaskStore,
+  store: ITaskStore,
   taskId: string,
   result: RunResult,
 ): Promise<RunResult> {
@@ -108,7 +108,7 @@ export async function writeRunResult(
  * Read run_result.json artifact.
  */
 export async function readRunResult(
-  store: TaskStore,
+  store: ITaskStore,
   taskId: string,
 ): Promise<RunResult | undefined> {
   const taskDir = await resolveTaskDir(store, taskId);
@@ -128,7 +128,7 @@ export async function readRunResult(
  * Mark run artifact as expired (BUG-AUDIT-003).
  */
 export async function markRunArtifactExpired(
-  store: TaskStore,
+  store: ITaskStore,
   taskId: string,
   reason: string,
 ): Promise<void> {
@@ -154,7 +154,7 @@ export async function markRunArtifactExpired(
  * Write or update heartbeat.
  */
 export async function writeHeartbeat(
-  store: TaskStore,
+  store: ITaskStore,
   taskId: string,
   agentId: string,
   ttlMs: number,
@@ -192,7 +192,7 @@ export async function writeHeartbeat(
  * Read heartbeat.
  */
 export async function readHeartbeat(
-  store: TaskStore,
+  store: ITaskStore,
   taskId: string,
 ): Promise<RunHeartbeat | undefined> {
   const taskDir = await resolveTaskDir(store, taskId);
@@ -213,7 +213,7 @@ export async function readHeartbeat(
  * Returns tasks with expired heartbeats.
  */
 export async function checkStaleHeartbeats(
-  store: TaskStore,
+  store: ITaskStore,
   ttlMs: number,
 ): Promise<RunHeartbeat[]> {
   const inProgress = await store.list({ status: "in-progress" });
@@ -237,7 +237,7 @@ export async function checkStaleHeartbeats(
  * Get resume info for a task (for crash recovery).
  */
 export async function getResumeInfo(
-  store: TaskStore,
+  store: ITaskStore,
   taskId: string,
   ttlMs: number,
 ): Promise<ResumeInfo> {

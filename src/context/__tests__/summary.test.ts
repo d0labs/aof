@@ -8,17 +8,18 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdtemp, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { TaskStore } from "../../store/task-store.js";
+import { FilesystemTaskStore } from "../../store/task-store.js";
+import type { ITaskStore } from "../../store/interfaces.js";
 import { generateSummary, writeSummary, readSummary } from "../summary.js";
 import type { SubAgentSummary } from "../summary.js";
 
 describe("Sub-Agent Summary", () => {
   let tmpDir: string;
-  let store: TaskStore;
+  let store: ITaskStore;
 
   beforeEach(async () => {
     tmpDir = await mkdtemp(join(tmpdir(), "aof-summary-test-"));
-    store = new TaskStore(tmpDir);
+    store = new FilesystemTaskStore(tmpDir);
     await store.init();
   });
 

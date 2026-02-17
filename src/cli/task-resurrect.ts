@@ -7,7 +7,7 @@
  * See AOF-p3k task brief for requirements.
  */
 
-import type { TaskStore } from "../store/task-store.js";
+import type { ITaskStore } from "../store/interfaces.js";
 import type { EventLogger } from "../events/logger.js";
 import { resetDispatchFailures } from "../dispatch/failure-tracker.js";
 
@@ -20,7 +20,7 @@ import { resetDispatchFailures } from "../dispatch/failure-tracker.js";
  * @param userName - User performing the resurrection
  */
 export async function resurrectTask(
-  store: TaskStore,
+  store: ITaskStore,
   eventLogger: EventLogger,
   taskId: string,
   userName: string

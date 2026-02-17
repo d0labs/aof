@@ -18,13 +18,14 @@ import { mkdtemp, rm, writeFile, mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { readFile } from "node:fs/promises";
-import { TaskStore } from "../../store/task-store.js";
+import { FilesystemTaskStore } from "../../store/task-store.js";
+import type { ITaskStore } from "../../store/interfaces.js";
 import { EventLogger } from "../../events/logger.js";
 import type { BaseEvent } from "../../schemas/event.js";
 
 describe("BUG-001: Silent parse failure (validation errors not surfaced)", () => {
   let tmpDir: string;
-  let store: TaskStore;
+  let store: ITaskStore;
   let logger: EventLogger;
   let eventsDir: string;
   let capturedEvents: BaseEvent[];
@@ -42,7 +43,7 @@ describe("BUG-001: Silent parse failure (validation errors not surfaced)", () =>
       },
     });
     
-    store = new TaskStore(tmpDir, { logger });
+    store = new FilesystemTaskStore(tmpDir, { logger });
     await store.init();
   });
 

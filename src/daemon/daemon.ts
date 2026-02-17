@@ -1,7 +1,8 @@
 import { join } from "node:path";
 import { existsSync, readFileSync, writeFileSync, unlinkSync } from "node:fs";
 import type { Server } from "node:http";
-import { TaskStore } from "../store/task-store.js";
+import { FilesystemTaskStore } from "../store/task-store.js";
+import type { ITaskStore } from "../store/interfaces.js";
 import { EventLogger } from "../events/logger.js";
 import { AOFService, type AOFServiceConfig } from "../service/aof-service.js";
 import type { AOFMetrics } from "../metrics/exporter.js";
@@ -9,7 +10,7 @@ import type { poll } from "../dispatch/scheduler.js";
 import { createHealthServer, type DaemonStateProvider } from "./server.js";
 
 export interface AOFDaemonOptions extends AOFServiceConfig {
-  store?: TaskStore;
+  store?: ITaskStore;
   logger?: EventLogger;
   metrics?: AOFMetrics;
   poller?: typeof poll;
@@ -35,7 +36,7 @@ function isProcessRunning(pid: number): boolean {
 }
 
 export async function startAofDaemon(opts: AOFDaemonOptions): Promise<AOFDaemonContext> {
-  const store = opts.store ?? new TaskStore(opts.dataDir);
+  const store = opts.store ?? new FilesystemTaskStore(opts.dataDir);
   const logger = opts.logger ?? new EventLogger(join(opts.dataDir, "events"));
 
   const service = new AOFService(

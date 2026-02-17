@@ -1,4 +1,4 @@
-import type { TaskStore } from "../store/task-store.js";
+import type { ITaskStore } from "../store/interfaces.js";
 
 export interface HealthStatus {
   status: "healthy" | "degraded" | "unhealthy";
@@ -24,7 +24,7 @@ const STALE_THRESHOLD_MS = 5 * 60 * 1000; // 5 minutes
 
 export async function getHealthStatus(
   state: DaemonState,
-  store: TaskStore,
+  store: ITaskStore,
 ): Promise<HealthStatus> {
   const now = Date.now();
 

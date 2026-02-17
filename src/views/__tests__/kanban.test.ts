@@ -2,18 +2,19 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdtemp, rm, readFile, stat } from "node:fs/promises";
 import { join, relative, sep } from "node:path";
 import { tmpdir } from "node:os";
-import { TaskStore } from "../../store/task-store.js";
+import { FilesystemTaskStore } from "../../store/task-store.js";
+import type { ITaskStore } from "../../store/interfaces.js";
 import { syncKanbanView, createKanbanHooks } from "../kanban.js";
 
 const toPosixPath = (value: string) => value.split(sep).join("/");
 
 describe("kanban view", () => {
   let tmpDir: string;
-  let store: TaskStore;
+  let store: ITaskStore;
 
   beforeEach(async () => {
     tmpDir = await mkdtemp(join(tmpdir(), "aof-kanban-test-"));
-    store = new TaskStore(tmpDir);
+    store = new FilesystemTaskStore(tmpDir);
     await store.init();
   });
 
@@ -106,12 +107,12 @@ describe("kanban view", () => {
   });
 
   it("updates pointers on transitions via hooks", async () => {
-    let hookedStore: TaskStore;
+    let hookedStore: ITaskStore;
     const hooks = createKanbanHooks(() => hookedStore, {
       dataDir: tmpDir,
       swimlaneBy: "priority",
     });
-    hookedStore = new TaskStore(tmpDir, { hooks });
+    hookedStore = new FilesystemTaskStore(tmpDir, { hooks });
     await hookedStore.init();
 
     const task = await hookedStore.create({

@@ -1,5 +1,6 @@
 import { join } from "node:path";
-import { TaskStore } from "../store/task-store.js";
+import { FilesystemTaskStore } from "../store/task-store.js";
+import type { ITaskStore } from "../store/interfaces.js";
 import { EventLogger } from "../events/logger.js";
 import { poll, type PollResult, type SchedulerConfig } from "../dispatch/scheduler.js";
 import type { AOFMetrics } from "../metrics/exporter.js";
@@ -19,7 +20,7 @@ export interface AOFServiceConfig {
 }
 
 export interface AOFServiceDependencies {
-  store?: TaskStore;
+  store?: ITaskStore;
   logger?: EventLogger;
   metrics?: AOFMetrics;
   notifier?: NotificationService;
@@ -38,7 +39,7 @@ export interface AOFServiceStatus {
 }
 
 export class AOFService {
-  private readonly store: TaskStore;
+  private readonly store: ITaskStore;
   private readonly logger: EventLogger;
   private readonly metrics?: AOFMetrics;
   private readonly notifier?: NotificationService;
@@ -49,7 +50,7 @@ export class AOFService {
   private readonly vaultRoot?: string;
 
   // Multi-project support
-  private projectStores: Map<string, TaskStore> = new Map();
+  private projectStores: Map<string, ITaskStore> = new Map();
   private projects: ProjectRecord[] = [];
 
   private running = false;
@@ -63,7 +64,7 @@ export class AOFService {
   constructor(deps: AOFServiceDependencies, config: AOFServiceConfig) {
     this.vaultRoot = config.vaultRoot;
     
-    const storeWithHooks = deps.store ?? new TaskStore(config.dataDir, {
+    const storeWithHooks = deps.store ?? new FilesystemTaskStore(config.dataDir, {
       hooks: this.createStoreHooks(deps.notifier),
     });
     
@@ -185,7 +186,7 @@ export class AOFService {
         continue;
       }
 
-      const store = new TaskStore(project.path, {
+      const store = new FilesystemTaskStore(project.path, {
         projectId: project.id,
         hooks: this.createStoreHooks(this.notifier),
         logger: this.logger,

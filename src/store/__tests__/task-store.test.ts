@@ -2,7 +2,8 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdtemp, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { TaskStore, parseTaskFile, serializeTask } from "../task-store.js";
+import { FilesystemTaskStore, parseTaskFile, serializeTask } from "../task-store.js";
+import type { ITaskStore } from "../interfaces.js";
 
 describe("parseTaskFile / serializeTask", () => {
   const raw = `---
@@ -51,11 +52,11 @@ See also: ./artifacts/design.md
 
 describe("TaskStore", () => {
   let tmpDir: string;
-  let store: TaskStore;
+  let store: ITaskStore;
 
   beforeEach(async () => {
     tmpDir = await mkdtemp(join(tmpdir(), "aof-test-"));
-    store = new TaskStore(tmpDir);
+    store = new FilesystemTaskStore(tmpDir);
     await store.init();
   });
 
@@ -250,7 +251,7 @@ Task body with legacy schema`;
       await writeFile(malformedFile, malformedContent, "utf-8");
 
       // Create store with event logger
-      const storeWithLogger = new TaskStore(tmpDir, { logger });
+      const storeWithLogger = new FilesystemTaskStore(tmpDir, { logger });
 
       // List tasks should log validation failure
       const tasks = await storeWithLogger.list();
@@ -304,7 +305,7 @@ updated: 2026-02-08T15:00:00Z
 Body`, "utf-8");
 
       // Create store with logger
-      const storeWithLogger = new TaskStore(tmpDir, { logger });
+      const storeWithLogger = new FilesystemTaskStore(tmpDir, { logger });
 
       // List should return only valid task
       const tasks = await storeWithLogger.list();

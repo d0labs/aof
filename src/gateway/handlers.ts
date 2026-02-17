@@ -1,6 +1,6 @@
 import { collectMetrics } from "../metrics/collector.js";
 import type { AOFMetrics } from "../metrics/exporter.js";
-import type { TaskStore } from "../store/task-store.js";
+import type { ITaskStore } from "../store/interfaces.js";
 import type { AOFService } from "../service/aof-service.js";
 
 export interface GatewayRequest {
@@ -17,7 +17,7 @@ export interface GatewayResponse {
 export type GatewayHandler = (req: GatewayRequest) => Promise<GatewayResponse> | GatewayResponse;
 
 export function createMetricsHandler(opts: {
-  store: TaskStore;
+  store: ITaskStore;
   metrics: AOFMetrics;
   service: AOFService;
 }): GatewayHandler {

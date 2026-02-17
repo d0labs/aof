@@ -22,21 +22,22 @@ import { mkdtemp, rm, writeFile, mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import writeFileAtomic from "write-file-atomic";
-import { TaskStore, serializeTask } from "../../store/task-store.js";
+import { FilesystemTaskStore, serializeTask } from "../../store/task-store.js";
+import type { ITaskStore } from "../../store/interfaces.js";
 import { EventLogger } from "../../events/logger.js";
 import { handleGateTransition, loadProjectManifest } from "../gate-transition-handler.js";
 import type { Task } from "../../schemas/task.js";
 
 describe("gate-transition-handler", () => {
   let projectRoot: string;
-  let store: TaskStore;
+  let store: ITaskStore;
   let logger: EventLogger;
 
   beforeEach(async () => {
     projectRoot = await mkdtemp(join(tmpdir(), "aof-gate-handler-test-"));
     await mkdir(join(projectRoot, "tasks"), { recursive: true });
     await mkdir(join(projectRoot, "events"), { recursive: true });
-    store = new TaskStore(projectRoot);
+    store = new FilesystemTaskStore(projectRoot);
     await store.init();
     logger = new EventLogger(join(projectRoot, "events"));
   });

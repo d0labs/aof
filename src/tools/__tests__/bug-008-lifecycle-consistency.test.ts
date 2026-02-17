@@ -17,7 +17,8 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdtemp, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { TaskStore } from "../../store/task-store.js";
+import { FilesystemTaskStore } from "../../store/task-store.js";
+import type { ITaskStore } from "../../store/interfaces.js";
 import { EventLogger } from "../../events/logger.js";
 import { aofDispatch, aofTaskComplete } from "../aof-tools.js";
 import type { ToolContext } from "../aof-tools.js";
@@ -25,7 +26,7 @@ import type { BaseEvent } from "../../schemas/event.js";
 
 describe("BUG-008: Lifecycle Consistency (in-progress guard)", () => {
   let tmpDir: string;
-  let store: TaskStore;
+  let store: ITaskStore;
   let logger: EventLogger;
   let ctx: ToolContext;
   let capturedEvents: BaseEvent[];
@@ -41,7 +42,7 @@ describe("BUG-008: Lifecycle Consistency (in-progress guard)", () => {
       },
     });
     
-    store = new TaskStore(tmpDir, {
+    store = new FilesystemTaskStore(tmpDir, {
       hooks: {
         afterTransition: async (task, previousStatus) => {
           await logger.logTransition(

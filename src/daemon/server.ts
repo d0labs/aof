@@ -1,5 +1,5 @@
 import { createServer, type Server, type IncomingMessage, type ServerResponse } from "node:http";
-import type { TaskStore } from "../store/task-store.js";
+import type { ITaskStore } from "../store/interfaces.js";
 import { getHealthStatus, type DaemonState } from "./health.js";
 
 export type DaemonStateProvider = () => DaemonState;
@@ -9,7 +9,7 @@ export type DaemonStateProvider = () => DaemonState;
  */
 export function createHealthServer(
   getState: DaemonStateProvider,
-  store: TaskStore,
+  store: ITaskStore,
   port = 3000,
   bind = "127.0.0.1",
 ): Server {

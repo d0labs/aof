@@ -9,7 +9,8 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { mkdtemp, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { TaskStore } from "../../store/task-store.js";
+import { FilesystemTaskStore } from "../../store/task-store.js";
+import type { ITaskStore } from "../../store/interfaces.js";
 import { EventLogger } from "../../events/logger.js";
 import { poll } from "../scheduler.js";
 import { MockExecutor } from "../executor.js";
@@ -17,7 +18,7 @@ import type { BaseEvent } from "../../schemas/event.js";
 
 describe("BUG-003: No Error Propagation in Executor (P0)", () => {
   let tmpDir: string;
-  let store: TaskStore;
+  let store: ITaskStore;
   let logger: EventLogger;
   let executor: MockExecutor;
   let events: BaseEvent[];
@@ -31,7 +32,7 @@ describe("BUG-003: No Error Propagation in Executor (P0)", () => {
       onEvent: (event) => events.push(event),
     });
     
-    store = new TaskStore(tmpDir, { logger });
+    store = new FilesystemTaskStore(tmpDir, { logger });
     await store.init();
     
     executor = new MockExecutor();

@@ -7,7 +7,8 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { randomBytes } from "node:crypto";
-import { TaskStore } from "../../store/task-store.js";
+import { FilesystemTaskStore } from "../../store/task-store.js";
+import type { ITaskStore } from "../../store/interfaces.js";
 import type { OrgChart } from "../../schemas/org-chart.js";
 import type { ContextBudgetPolicy } from "../budget.js";
 import {
@@ -22,13 +23,13 @@ import {
 
 describe("Context Steward", () => {
   let tmpDir: string;
-  let store: TaskStore;
+  let store: ITaskStore;
 
   beforeEach(async () => {
     // Create a unique temp directory for each test
     tmpDir = join(tmpdir(), `aof-test-${randomBytes(8).toString("hex")}`);
     await mkdir(tmpDir, { recursive: true });
-    store = new TaskStore(tmpDir);
+    store = new FilesystemTaskStore(tmpDir);
     await store.init();
   });
 

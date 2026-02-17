@@ -11,7 +11,7 @@
  * See AOF-l7y task brief for requirements.
  */
 
-import type { TaskStore } from "../store/task-store.js";
+import type { ITaskStore } from "../store/interfaces.js";
 import type { EventLogger } from "../events/logger.js";
 
 export interface RecoveryAction {
@@ -43,7 +43,7 @@ const LEASE_TTL_MS = 10 * 60 * 1000; // 10 minutes
  * @returns Recovery result with actions taken
  */
 export async function attemptRecovery(
-  store: TaskStore,
+  store: ITaskStore,
   eventLogger: EventLogger,
   taskId: string
 ): Promise<RecoveryResult> {

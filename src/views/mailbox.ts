@@ -3,7 +3,7 @@ import { join, relative, sep } from "node:path";
 import writeFileAtomic from "write-file-atomic";
 import { stringify as stringifyYaml } from "yaml";
 import type { Task, TaskStatus } from "../schemas/task.js";
-import type { TaskStore } from "../store/task-store.js";
+import type { ITaskStore } from "../store/interfaces.js";
 import type { TaskStoreHooks } from "../store/task-store.js";
 
 export type MailboxFolder = "inbox" | "processing" | "outbox";
@@ -91,13 +91,13 @@ async function pruneMailboxDir(dir: string, keep: Set<string>): Promise<number> 
   return removed;
 }
 
-function resolveTaskPath(task: Task, store: TaskStore): string {
+function resolveTaskPath(task: Task, store: ITaskStore): string {
   if (task.path) return task.path;
   return join(store.tasksDir, task.frontmatter.status, `${task.frontmatter.id}.md`);
 }
 
 export async function syncMailboxView(
-  store: TaskStore,
+  store: ITaskStore,
   options: MailboxViewOptions,
 ): Promise<MailboxViewResult> {
   const agentsDir = options.viewsDir ?? options.agentsDir ?? join(options.dataDir, "views", "mailbox");

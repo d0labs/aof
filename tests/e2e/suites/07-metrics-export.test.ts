@@ -9,7 +9,8 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { TaskStore } from "../../../src/store/task-store.js";
+import { FilesystemTaskStore } from "../../../src/store/task-store.js";
+import type { ITaskStore } from "../../../src/store/interfaces.js";
 import { AOFMetrics } from "../../../src/metrics/exporter.js";
 import { collectMetrics } from "../../../src/metrics/collector.js";
 import { acquireLease } from "../../../src/store/lease.js";
@@ -20,13 +21,13 @@ import { homedir } from "node:os";
 const TEST_DATA_DIR = join(homedir(), ".openclaw-aof-e2e-test", "metrics-export");
 
 describe("E2E: Metrics Export", () => {
-  let store: TaskStore;
+  let store: ITaskStore;
   let metrics: AOFMetrics;
 
   beforeEach(async () => {
     await cleanupTestData(TEST_DATA_DIR);
     await seedTestData(TEST_DATA_DIR);
-    store = new TaskStore(TEST_DATA_DIR);
+    store = new FilesystemTaskStore(TEST_DATA_DIR);
     metrics = new AOFMetrics();
   });
 

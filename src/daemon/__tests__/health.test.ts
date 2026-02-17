@@ -1,10 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { getHealthStatus, type DaemonState } from "../health.js";
-import type { TaskStore } from "../../store/task-store.js";
+import type { ITaskStore } from "../../store/interfaces.js";
 
 describe("Daemon Health", () => {
   let mockState: DaemonState;
-  let mockStore: TaskStore;
+  let mockStore: ITaskStore;
 
   beforeEach(() => {
     mockState = {
