@@ -565,6 +565,39 @@ task
     await taskClose(store, eventLogger, taskId, { recoverOnFailure: opts.recoverOnFailure });
   });
 
+// --- task dep (nested subcommand) ---
+const taskDep = task
+  .command("dep")
+  .description("Manage task dependencies");
+
+taskDep
+  .command("add <task-id> <blocker-id>")
+  .description("Add a dependency (task will be blocked by blocker)")
+  .option("--project <id>", "Project ID", "_inbox")
+  .action(async (taskId: string, blockerId: string, opts: { project: string }) => {
+    const { createProjectStore } = await import("./project-utils.js");
+    const { taskDepAdd } = await import("./commands/task-dep.js");
+    const root = program.opts()["root"] as string;
+    const { store } = await createProjectStore({ projectId: opts.project, vaultRoot: root });
+    await store.init();
+
+    await taskDepAdd(store, taskId, blockerId);
+  });
+
+taskDep
+  .command("remove <task-id> <blocker-id>")
+  .description("Remove a dependency")
+  .option("--project <id>", "Project ID", "_inbox")
+  .action(async (taskId: string, blockerId: string, opts: { project: string }) => {
+    const { createProjectStore } = await import("./project-utils.js");
+    const { taskDepRemove } = await import("./commands/task-dep.js");
+    const root = program.opts()["root"] as string;
+    const { store } = await createProjectStore({ projectId: opts.project, vaultRoot: root });
+    await store.init();
+
+    await taskDepRemove(store, taskId, blockerId);
+  });
+
 // --- org ---
 const org = program
   .command("org")
