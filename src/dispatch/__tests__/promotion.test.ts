@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { checkPromotionEligibility } from "../scheduler.js";
+import { checkPromotionEligibility } from "../promotion.js";
 import type { Task } from "../../schemas/task.js";
 
 describe("checkPromotionEligibility", () => {

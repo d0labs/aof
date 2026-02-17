@@ -7,63 +7,10 @@
 import type { ITaskStore } from "../../store/interfaces.js";
 import type { EventLogger } from "../../events/logger.js";
 import type { Task } from "../../schemas/task.js";
+import { checkPromotionEligibility } from "../../dispatch/promotion.js";
 
 export interface TaskPromoteOptions {
   force?: boolean;
-}
-
-/**
- * Check if a task is eligible for promotion.
- * Reused by CLI and scheduler.
- */
-export function checkPromotionEligibility(
-  task: Task,
-  allTasks: Task[],
-  childrenByParent: Map<string, Task[]>
-): { eligible: boolean; reason?: string } {
-  
-  const deps = task.frontmatter.dependsOn ?? [];
-  if (deps.length > 0) {
-    for (const depId of deps) {
-      const dep = allTasks.find(t => t.frontmatter.id === depId);
-      if (!dep) {
-        return { eligible: false, reason: `Missing dependency: ${depId}` };
-      }
-      if (dep.frontmatter.status !== "done") {
-        return { eligible: false, reason: `Waiting on dependency: ${depId}` };
-      }
-    }
-  }
-
-  const subtasks = childrenByParent.get(task.frontmatter.id) ?? [];
-  const incompleteSubtasks = subtasks.filter(st => st.frontmatter.status !== "done");
-  if (incompleteSubtasks.length > 0) {
-    return { 
-      eligible: false, 
-      reason: `Waiting on ${incompleteSubtasks.length} subtask(s)` 
-    };
-  }
-
-  const routing = task.frontmatter.routing;
-  const hasTarget = routing.agent || routing.role || routing.team;
-  if (!hasTarget) {
-    return { 
-      eligible: false, 
-      reason: "No routing target (needs agent/role/team)" 
-    };
-  }
-
-  const lease = task.frontmatter.lease;
-  if (lease) {
-    const expiresAt = new Date(lease.expiresAt).getTime();
-    if (expiresAt > Date.now()) {
-      return { 
-        eligible: false, 
-        reason: "Active lease (corrupted state?)" 
-      };
-    }
-  }
-
   return { eligible: true };
 }
 
