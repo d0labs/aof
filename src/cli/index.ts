@@ -499,6 +499,23 @@ task
     await taskPromote(store, eventLogger, taskId, { force: opts.force });
   });
 
+task
+  .command("cancel <task-id>")
+  .description("Cancel a task with optional reason")
+  .option("--reason <reason>", "Cancellation reason")
+  .option("--project <id>", "Project ID", "_inbox")
+  .action(async (taskId: string, opts: { reason?: string; project: string }) => {
+    const { createProjectStore } = await import("./project-utils.js");
+    const { taskCancel } = await import("./commands/task-cancel.js");
+    const root = program.opts()["root"] as string;
+    const { store, projectRoot } = await createProjectStore({ projectId: opts.project, vaultRoot: root });
+    await store.init();
+
+    const eventLogger = new EventLogger(join(projectRoot, "events"));
+
+    await taskCancel(store, eventLogger, taskId, { reason: opts.reason });
+  });
+
 // --- org ---
 const org = program
   .command("org")
