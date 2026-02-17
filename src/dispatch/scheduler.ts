@@ -654,8 +654,8 @@ export async function poll(
   
   // AOF-adf: Build team configuration map
   const teamConfigMap = new Map<string, { maxConcurrent?: number; minIntervalMs?: number }>();
-  if (orgChart?.chart) {
-    for (const team of orgChart.chart.teams) {
+  if (orgChart?.teams) {
+    for (const team of orgChart.teams) {
       if (team.dispatch) {
         teamConfigMap.set(team.id, {
           maxConcurrent: team.dispatch.maxConcurrent,

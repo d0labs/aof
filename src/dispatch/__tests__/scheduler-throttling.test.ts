@@ -120,10 +120,20 @@ describe("Scheduler Throttling (AOF-adf)", () => {
       await store.transition(task.frontmatter.id, "ready");
     }
 
-    // First poll - should dispatch first task
+    // First poll - dispatches all 3 (interval only throttles between polls)
     const result1 = await poll(store, logger, config);
     const assignActions1 = result1.actions.filter(a => a.type === "assign");
-    expect(assignActions1).toHaveLength(1);
+    expect(assignActions1).toHaveLength(3);
+
+    // Create more ready tasks for second poll
+    for (let i = 0; i < 2; i++) {
+      const task = await store.create({
+        title: `Ready extra ${i}`,
+        createdBy: "main",
+        routing: { agent: "swe-backend" },
+      });
+      await store.transition(task.frontmatter.id, "ready");
+    }
 
     // Immediate second poll - should NOT dispatch (interval not elapsed)
     const result2 = await poll(store, logger, config);
@@ -266,10 +276,20 @@ describe("Scheduler Throttling (AOF-adf)", () => {
       await store.transition(task.frontmatter.id, "ready");
     }
 
-    // First poll - should dispatch first task
+    // First poll - dispatches all 3 (per-team interval only throttles between polls)
     const result1 = await poll(store, logger, config);
     const assignActions1 = result1.actions.filter(a => a.type === "assign");
-    expect(assignActions1).toHaveLength(1);
+    expect(assignActions1).toHaveLength(3);
+
+    // Create more ready tasks for second poll
+    for (let i = 0; i < 2; i++) {
+      const task = await store.create({
+        title: `Ready backend extra ${i}`,
+        createdBy: "main",
+        routing: { team: "backend-team", agent: "swe-backend" },
+      });
+      await store.transition(task.frontmatter.id, "ready");
+    }
 
     // Immediate second poll - should NOT dispatch (team interval not elapsed)
     const result2 = await poll(store, logger, config);
