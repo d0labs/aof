@@ -221,6 +221,25 @@ export const OrgAgent = z.object({
 });
 export type OrgAgent = z.infer<typeof OrgAgent>;
 
+/** Murmur trigger configuration for orchestration reviews. */
+export const MurmurTrigger = z.object({
+  kind: z.enum(["queueEmpty", "completionBatch", "interval", "failureBatch"]),
+  /** Threshold for completionBatch/failureBatch triggers. */
+  threshold: z.number().int().positive().optional(),
+  /** Interval in milliseconds for interval trigger. */
+  intervalMs: z.number().int().positive().optional(),
+});
+export type MurmurTrigger = z.infer<typeof MurmurTrigger>;
+
+/** Murmur orchestration configuration for a team. */
+export const MurmurConfig = z.object({
+  /** Trigger conditions for orchestration reviews. */
+  triggers: z.array(MurmurTrigger).min(1),
+  /** Context to inject: 'vision', 'roadmap', 'taskSummary'. */
+  context: z.array(z.string()).optional(),
+});
+export type MurmurConfig = z.infer<typeof MurmurConfig>;
+
 /** Team definition. */
 export const OrgTeam = z.object({
   id: z.string().min(1),
@@ -228,6 +247,12 @@ export const OrgTeam = z.object({
   description: z.string().optional(),
   /** Lead agent ID. */
   lead: z.string().optional(),
+  /** Orchestrator agent ID (PM who manages tasks and orchestrates reviews). */
+  orchestrator: z.string().optional(),
+  /** Technical lead agent ID (architect who provides technical guidance). */
+  technicalLead: z.string().optional(),
+  /** Murmur orchestration configuration (optional). */
+  murmur: MurmurConfig.optional(),
 });
 export type OrgTeam = z.infer<typeof OrgTeam>;
 
@@ -327,6 +352,31 @@ export function validateWorkflowRoles(
     }
     if (gate.escalateTo && !roles[gate.escalateTo]) {
       errors.push(`Gate escalateTo references undefined role: ${gate.escalateTo}`);
+    }
+  }
+
+  return errors;
+}
+
+/**
+ * Validate that team orchestrator and technicalLead fields reference valid agent IDs.
+ *
+ * This ensures team definitions reference agents that exist in the org chart,
+ * preventing runtime errors when dispatching orchestration tasks.
+ *
+ * @param orgChart - Org chart to validate
+ * @returns Array of validation errors (empty if valid)
+ */
+export function validateTeamAgents(orgChart: OrgChart): string[] {
+  const errors: string[] = [];
+  const agentIds = new Set(orgChart.agents.map(a => a.id));
+
+  for (const team of orgChart.teams) {
+    if (team.orchestrator && !agentIds.has(team.orchestrator)) {
+      errors.push(`Team ${team.id} orchestrator references undefined agent: ${team.orchestrator}`);
+    }
+    if (team.technicalLead && !agentIds.has(team.technicalLead)) {
+      errors.push(`Team ${team.id} technicalLead references undefined agent: ${team.technicalLead}`);
     }
   }
 
