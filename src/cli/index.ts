@@ -28,7 +28,7 @@ import { init } from "./init.js";
 import { integrateWithOpenClaw, detectOpenClawConfig } from "../packaging/integration.js";
 import { ejectFromOpenClaw, detectOpenClawIntegration } from "../packaging/ejector.js";
 import { migrateToProjects, rollbackMigration } from "../projects/migration.js";
-import { daemonStart, daemonStop, daemonStatus, daemonRestart } from "./commands/daemon.js";
+import { registerDaemonCommands } from "./commands/daemon.js";
 
 const AOF_ROOT = process.env["AOF_ROOT"] ?? resolve(homedir(), "Projects", "AOF");
 
@@ -247,54 +247,7 @@ eject
   });
 
 // --- daemon ---
-const daemon = program
-  .command("daemon")
-  .description("Daemon management commands");
-
-daemon
-  .command("start")
-  .description("Start the AOF daemon in background")
-  .option("--port <number>", "HTTP port", "18000")
-  .option("--bind <address>", "Bind address", "127.0.0.1")
-  .option("--data-dir <path>", "Data directory")
-  .option("--log-level <level>", "Log level", "info")
-  .action(async (opts: { port: string; bind: string; dataDir?: string; logLevel: string }) => {
-    const root = program.opts()["root"] as string;
-    const dataDir = opts.dataDir ?? root;
-    await daemonStart(dataDir, opts);
-  });
-
-daemon
-  .command("stop")
-  .description("Stop the running daemon")
-  .option("--timeout <seconds>", "Shutdown timeout in seconds", "10")
-  .action(async (opts: { timeout: string }) => {
-    const root = program.opts()["root"] as string;
-    await daemonStop(root, opts);
-  });
-
-daemon
-  .command("status")
-  .description("Check daemon status")
-  .option("--port <number>", "HTTP port (for health endpoint display)", "18000")
-  .option("--bind <address>", "Bind address (for health endpoint display)", "127.0.0.1")
-  .action(async (opts: { port: string; bind: string }) => {
-    const root = program.opts()["root"] as string;
-    await daemonStatus(root, opts.port, opts.bind);
-  });
-
-daemon
-  .command("restart")
-  .description("Restart the daemon")
-  .option("--port <number>", "HTTP port", "18000")
-  .option("--bind <address>", "Bind address", "127.0.0.1")
-  .option("--data-dir <path>", "Data directory")
-  .option("--log-level <level>", "Log level", "info")
-  .action(async (opts: { port: string; bind: string; dataDir?: string; logLevel: string }) => {
-    const root = program.opts()["root"] as string;
-    const dataDir = opts.dataDir ?? root;
-    await daemonRestart(dataDir, opts);
-  });
+registerDaemonCommands(program);
 
 // --- lint ---
 program

@@ -8,6 +8,7 @@ import { fork, type ChildProcess } from "node:child_process";
 import { join, dirname } from "node:path";
 import { existsSync, readFileSync, unlinkSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+import type { Command } from "commander";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -287,4 +288,58 @@ export async function daemonRestart(
   // Start
   console.log("");
   await daemonStart(dataDir, startOptions);
+}
+
+/**
+ * Register daemon commands with the CLI program.
+ */
+export function registerDaemonCommands(program: Command): void {
+  const daemon = program
+    .command("daemon")
+    .description("Daemon management commands");
+
+  daemon
+    .command("start")
+    .description("Start the AOF daemon in background")
+    .option("--port <number>", "HTTP port", "18000")
+    .option("--bind <address>", "Bind address", "127.0.0.1")
+    .option("--data-dir <path>", "Data directory")
+    .option("--log-level <level>", "Log level", "info")
+    .action(async (opts: { port: string; bind: string; dataDir?: string; logLevel: string }) => {
+      const root = program.opts()["root"] as string;
+      const dataDir = opts.dataDir ?? root;
+      await daemonStart(dataDir, opts);
+    });
+
+  daemon
+    .command("stop")
+    .description("Stop the running daemon")
+    .option("--timeout <seconds>", "Shutdown timeout in seconds", "10")
+    .action(async (opts: { timeout: string }) => {
+      const root = program.opts()["root"] as string;
+      await daemonStop(root, opts);
+    });
+
+  daemon
+    .command("status")
+    .description("Check daemon status")
+    .option("--port <number>", "HTTP port (for health endpoint display)", "18000")
+    .option("--bind <address>", "Bind address (for health endpoint display)", "127.0.0.1")
+    .action(async (opts: { port: string; bind: string }) => {
+      const root = program.opts()["root"] as string;
+      await daemonStatus(root, opts.port, opts.bind);
+    });
+
+  daemon
+    .command("restart")
+    .description("Restart the daemon")
+    .option("--port <number>", "HTTP port", "18000")
+    .option("--bind <address>", "Bind address", "127.0.0.1")
+    .option("--data-dir <path>", "Data directory")
+    .option("--log-level <level>", "Log level", "info")
+    .action(async (opts: { port: string; bind: string; dataDir?: string; logLevel: string }) => {
+      const root = program.opts()["root"] as string;
+      const dataDir = opts.dataDir ?? root;
+      await daemonRestart(dataDir, opts);
+    });
 }
