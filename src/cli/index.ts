@@ -500,6 +500,38 @@ task
   });
 
 task
+  .command("edit <task-id>")
+  .description("Edit task metadata (title, priority, assignee, team, description)")
+  .option("--title <title>", "Update task title")
+  .option("--priority <priority>", "Update priority (low|normal|high|critical)")
+  .option("--assignee <agent>", "Update assigned agent")
+  .option("--team <team>", "Update owner team")
+  .option("--description <description>", "Update task description (body)")
+  .option("--project <id>", "Project ID", "_inbox")
+  .action(async (taskId: string, opts: { 
+    title?: string; 
+    priority?: string; 
+    assignee?: string; 
+    team?: string; 
+    description?: string;
+    project: string;
+  }) => {
+    const { createProjectStore } = await import("./project-utils.js");
+    const { taskEdit } = await import("./commands/task-edit.js");
+    const root = program.opts()["root"] as string;
+    const { store } = await createProjectStore({ projectId: opts.project, vaultRoot: root });
+    await store.init();
+
+    await taskEdit(store, taskId, {
+      title: opts.title,
+      description: opts.description,
+      priority: opts.priority,
+      assignee: opts.assignee,
+      team: opts.team,
+    });
+  });
+
+task
   .command("cancel <task-id>")
   .description("Cancel a task with optional reason")
   .option("--reason <reason>", "Cancellation reason")
