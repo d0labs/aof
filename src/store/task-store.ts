@@ -17,6 +17,7 @@ import type { TaskStatus } from "../schemas/task.js";
 import type { ITaskStore } from "./interfaces.js";
 import { parseTaskFile, serializeTask, extractTaskSections, contentHash } from "./task-parser.js";
 import { hasCycle, addDependency, removeDependency } from "./task-deps.js";
+import { lintTasks } from "./task-validation.js";
 
 const FRONTMATTER_FENCE = "---";
 
@@ -588,82 +589,7 @@ export class FilesystemTaskStore implements ITaskStore {
    * Returns tasks where frontmatter status doesn't match directory.
    */
   async lint(): Promise<Array<{ task: Task; issue: string }>> {
-    const issues: Array<{ task: Task; issue: string }> = [];
-    
-    // First check for tasks in non-standard directories
-    try {
-      const allDirs = await readdir(this.tasksDir, { withFileTypes: true });
-      const standardDirNames = new Set(STATUS_DIRS);
-      
-      for (const entry of allDirs) {
-        if (!entry.isDirectory()) continue;
-        if (standardDirNames.has(entry.name as TaskStatus)) continue;
-        
-        // Found a non-standard directory — check if it contains tasks
-        const nonStandardDir = join(this.tasksDir, entry.name);
-        let nonStandardEntries: string[];
-        try {
-          nonStandardEntries = await readdir(nonStandardDir);
-        } catch {
-          continue;
-        }
-        
-        for (const file of nonStandardEntries) {
-          if (!file.endsWith(".md")) continue;
-          const filePath = join(nonStandardDir, file);
-          
-          issues.push({
-            task: { frontmatter: {} as any, body: "", path: filePath },
-            issue: `Task in non-standard directory '${entry.name}/' — must be in one of: ${Array.from(STATUS_DIRS).join(", ")}`,
-          });
-        }
-      }
-    } catch {
-      // tasks directory doesn't exist — that's fine, will be caught elsewhere
-    }
-    
-    for (const status of STATUS_DIRS) {
-      const dir = this.statusDir(status);
-      let entries: string[];
-      try {
-        entries = await readdir(dir);
-      } catch {
-        continue;
-      }
-
-      for (const entry of entries) {
-        if (!entry.endsWith(".md")) continue;
-        const filePath = join(dir, entry);
-
-        try {
-          const raw = await readFile(filePath, "utf-8");
-          const task = parseTaskFile(raw, filePath);
-
-          // Check status matches directory
-          if (task.frontmatter.status !== status) {
-            issues.push({
-              task,
-              issue: `Status mismatch: frontmatter='${task.frontmatter.status}' but file in '${status}/'`,
-            });
-          }
-
-          // Check lease consistency
-          if (task.frontmatter.lease && task.frontmatter.status !== "in-progress") {
-            issues.push({
-              task,
-              issue: `Active lease but status is '${task.frontmatter.status}' (expected in-progress)`,
-            });
-          }
-        } catch (err) {
-          issues.push({
-            task: { frontmatter: {} as any, body: "", path: filePath },
-            issue: `Parse error: ${(err as Error).message}`,
-          });
-        }
-      }
-    }
-
-    return issues;
+    return lintTasks(this.tasksDir, this.statusDir.bind(this), this.logger);
   }
 
   /**
