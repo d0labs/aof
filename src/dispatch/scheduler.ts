@@ -29,6 +29,7 @@ import { loadOrgChart } from "../org/loader.js";
 import { checkThrottle, updateThrottleState, resetThrottleState as resetThrottleStateInternal } from "./throttle.js";
 import { isLeaseActive, startLeaseRenewal, stopLeaseRenewal, cleanupLeaseRenewals } from "./lease-manager.js";
 import { escalateGateTimeout } from "./escalation.js";
+import { executeAssignAction } from "./task-dispatcher.js";
 
 export interface SchedulerConfig {
   /** Root data directory. */
@@ -852,281 +853,22 @@ export async function poll(
             // BUG-002 fix: Don't count non-dispatch actions in actionsExecuted
             // executed remains false
             break;
-          case "assign":
-            // BUG-003: Log when executor is missing (but don't count as failed - nothing was attempted)
-            if (!config.executor) {
-              console.error(`[AOF] [BUG-003] Cannot dispatch task ${action.taskId}: executor is undefined`);
-              console.error(`[AOF] [BUG-003]   Agent: ${action.agent}`);
-              console.error(`[AOF] [BUG-003]   Task will remain in ready/ until executor is configured`);
-              // Don't set failed=true - no execution was attempted
-              break;
-            }
-
-            if (config.executor) {
-              try {
-                const latest = await store.get(action.taskId);
-                if (!latest) {
-                  console.warn(`[AOF] [TASK-056] Task ${action.taskId} not found, skipping dispatch`);
-                  continue;
-                }
-
-                if (latest.frontmatter.status !== "ready") {
-                  console.warn(
-                    `[AOF] [TASK-056] Dispatch dedup: skipping ${action.taskId} (status ${latest.frontmatter.status})`,
-                  );
-                  continue;
-                }
-
-                if (isLeaseActive(latest.frontmatter.lease)) {
-                  const lease = latest.frontmatter.lease;
-                  console.warn(
-                    `[AOF] [TASK-056] Dispatch dedup: skipping ${action.taskId} (active lease held by ${lease?.agent} until ${lease?.expiresAt})`,
-                  );
-                  continue;
-                }
-
-                const task = allTasks.find(t => t.frontmatter.id === action.taskId);
-                if (!task) {
-                  console.warn(`[AOF] [BUG-001] Task ${action.taskId} not found in allTasks, skipping dispatch`);
-                  continue;
-                }
-
-                // BUG-001 diagnostic: Log before dispatch attempt
-                console.info(`[AOF] [BUG-001] Attempting dispatch for task ${action.taskId} with agent ${action.agent}`);
-
-                // Log action start (non-fatal if logging fails)
-                try {
-                  await logger.logAction("action.started", "scheduler", action.taskId, {
-                    action: action.type,
-                    agent: action.agent,
-                  });
-                } catch (logErr) {
-                  // BUG-003: Log the logging error itself
-                  console.error(`[AOF] [BUG-003] Failed to log action.started: ${(logErr as Error).message}`);
-                }
-
-                // Acquire lease first (this also transitions ready → in-progress)
-                console.info(`[AOF] [BUG-001] Acquiring lease for task ${action.taskId}`);
-                const leasedTask = await acquireLease(store, action.taskId, action.agent!, {
-                  ttlMs: config.defaultLeaseTtlMs,
-                });
-                console.info(`[AOF] [BUG-001] Lease acquired for task ${action.taskId}`);
-
-                // Build task context using post-lease task path (now in-progress/)
-                const taskPath =
-                  leasedTask?.path ?? join(store.tasksDir, "in-progress", `${action.taskId}.md`);
-                const context: TaskContext = {
-                  taskId: action.taskId,
-                  taskPath,
-                  agent: action.agent!,
-                  priority: leasedTask?.frontmatter.priority ?? task.frontmatter.priority,
-                  routing: leasedTask?.frontmatter.routing ?? task.frontmatter.routing,
-                  projectId: store.projectId,
-                  projectRoot: store.projectRoot,
-                  taskRelpath: relative(store.projectRoot, taskPath),
-                };
-
-                // AOF-ofi: Inject gate context for workflow tasks (Progressive Disclosure L2)
-                const taskForContext = leasedTask ?? task;
-                if (taskForContext.frontmatter.gate) {
-                  const projectId = taskForContext.frontmatter.project;
-                  const projectManifest = await loadProjectManifest(store, projectId);
-                  
-                  if (projectManifest?.workflow) {
-                    const currentGate = projectManifest.workflow.gates.find(
-                      (g) => g.id === taskForContext.frontmatter.gate?.current
-                    );
-                    
-                    if (currentGate) {
-                      context.gateContext = buildGateContext(
-                        taskForContext,
-                        currentGate,
-                        projectManifest.workflow
-                      );
-                    }
-                  }
-                }
-
-                // BUG-001 diagnostic: Log immediately before executor invocation
-                console.info(`[AOF] [BUG-001] Invoking executor.spawn() for task ${action.taskId}, agent ${action.agent}`);
-                console.info(`[AOF] [BUG-001] Context: ${JSON.stringify(context)}`);
-
-                // Spawn agent session
-                const result = await config.executor.spawn(context, {
-                  timeoutMs: config.spawnTimeoutMs ?? 30_000,
-                });
-
-                // BUG-001 diagnostic: Log executor result
-                console.info(`[AOF] [BUG-001] Executor returned: ${JSON.stringify(result)}`);
-
-                if (result.success) {
-                  try {
-                    await logger.logDispatch("dispatch.matched", "scheduler", action.taskId, {
-                      agent: action.agent,
-                      sessionId: result.sessionId,
-                    });
-                  } catch {
-                    // Logging errors should not crash the scheduler
-                  }
-                  
-                  // Log action completion
-                  try {
-                    await logger.logAction("action.completed", "scheduler", action.taskId, {
-                      action: action.type,
-                      success: true,
-                      sessionId: result.sessionId,
-                    });
-                  } catch {
-                    // Logging errors should not crash the scheduler
-                  }
-
-                  startLeaseRenewal(store, action.taskId, action.agent!, config.defaultLeaseTtlMs);
-                  executed = true;
-                  
-                  // AOF-adf: Update throttle state after successful dispatch
-                  const dispatchedTask = await store.get(action.taskId);
-                  if (dispatchedTask) {
-                    const dispatchTeam = dispatchedTask.frontmatter.routing.team;
-                    updateThrottleState(dispatchTeam);
-                  }
-                } else {
-                  // Check if this is a platform concurrency limit error
-                  if (result.platformLimit !== undefined) {
-                    const previousCap = effectiveConcurrencyLimit ?? config.maxConcurrentDispatches ?? 3;
-                    effectiveConcurrencyLimit = Math.min(result.platformLimit, config.maxConcurrentDispatches ?? 3);
-                    
-                    console.info(
-                      `[AOF] Platform concurrency limit detected: ${result.platformLimit}, ` +
-                      `effective cap now ${effectiveConcurrencyLimit} (was ${previousCap})`
-                    );
-                    
-                    // Emit event (non-fatal if logging fails)
-                    try {
-                      await logger.log("concurrency.platformLimit", "scheduler", {
-                        taskId: action.taskId,
-                        payload: {
-                          detectedLimit: result.platformLimit,
-                          effectiveCap: effectiveConcurrencyLimit,
-                          previousCap,
-                        },
-                      });
-                    } catch (logErr) {
-                      console.error(`[AOF] Failed to log concurrency.platformLimit event: ${(logErr as Error).message}`);
-                    }
-                    
-                    // Release lease — task transitions back to ready (not blocked)
-                    try {
-                      await releaseLease(store, action.taskId, action.agent!);
-                    } catch (releaseErr) {
-                      console.error(`[AOF] Failed to release lease for ${action.taskId}: ${(releaseErr as Error).message}`);
-                    }
-                    
-                    // No retry count increment - this is capacity exhaustion, not failure
-                    console.info(
-                      `[AOF] Task ${action.taskId} requeued to ready (platform capacity exhausted, ` +
-                      `will retry next poll)`
-                    );
-                    
-                    continue; // Skip normal block transition and move to next action
-                  }
-                  
-                  // BUG-003: Log spawn failure with full context
-                  console.error(`[AOF] [BUG-003] Executor spawn failed for task ${action.taskId}:`);
-                  console.error(`[AOF] [BUG-003]   Agent: ${action.agent}`);
-                  console.error(`[AOF] [BUG-003]   Error: ${result.error}`);
-                  console.error(`[AOF] [BUG-003]   Task will be moved to blocked/`);
-
-                  // BUG-002: Track retry count and timestamp in metadata
-                  const currentTask = await store.get(action.taskId);
-                  const retryCount = ((currentTask?.frontmatter.metadata?.retryCount as number) ?? 0) + 1;
-                  
-                  // Update metadata before transition (BUG-002)
-                  if (currentTask) {
-                    currentTask.frontmatter.metadata = {
-                      ...currentTask.frontmatter.metadata,
-                      retryCount,
-                      lastBlockedAt: new Date().toISOString(),
-                      blockReason: `spawn_failed: ${result.error}`,
-                      lastError: result.error,
-                    };
-                    
-                    // Write updated task with metadata before transition
-                    const serialized = serializeTask(currentTask);
-                    const taskPath = currentTask.path ?? join(store.tasksDir, currentTask.frontmatter.status, `${currentTask.frontmatter.id}.md`);
-                    await writeFileAtomic(taskPath, serialized);
-                  }
-                  
-                  // Spawn failed — move to blocked
-                  await store.transition(action.taskId, "blocked", {
-                    reason: `spawn_failed: ${result.error}`,
-                  });
-                  
-                  try {
-                    await logger.logDispatch("dispatch.error", "scheduler", action.taskId, {
-                      agent: action.agent,
-                      error: result.error,
-                      errorMessage: result.error,
-                    });
-                  } catch (logErr) {
-                    console.error(`[AOF] [BUG-003] Failed to log dispatch.error: ${(logErr as Error).message}`);
-                  }
-                  
-                  // Log action completion with failure
-                  try {
-                    await logger.logAction("action.completed", "scheduler", action.taskId, {
-                      action: action.type,
-                      success: false,
-                      error: result.error,
-                      errorMessage: result.error,
-                    });
-                  } catch (logErr) {
-                    console.error(`[AOF] [BUG-003] Failed to log action.completed: ${(logErr as Error).message}`);
-                  }
-                  
-                  // Do NOT count as executed when spawn fails (BUG-006 fix)
-                  // executed remains false, mark as failed
-                  failed = true;
-                }
-              } catch (err) {
-                const error = err as Error;
-                const errorMsg = error.message;
-                const errorStack = error.stack ?? "No stack trace available";
-                
-                // BUG-003: Log exception with full stack trace
-                console.error(`[AOF] [BUG-003] Exception during dispatch for task ${action.taskId}:`);
-                console.error(`[AOF] [BUG-003]   Agent: ${action.agent}`);
-                console.error(`[AOF] [BUG-003]   Error: ${errorMsg}`);
-                console.error(`[AOF] [BUG-003]   Stack: ${errorStack}`);
-                
-                try {
-                  await logger.logDispatch("dispatch.error", "scheduler", action.taskId, {
-                    error: errorMsg,
-                    errorMessage: errorMsg,
-                    errorStack: errorStack,
-                  });
-                } catch (logErr) {
-                  console.error(`[AOF] [BUG-003] Failed to log dispatch.error: ${(logErr as Error).message}`);
-                }
-                
-                // Log action completion with exception
-                try {
-                  await logger.logAction("action.completed", "scheduler", action.taskId, {
-                    action: action.type,
-                    success: false,
-                    error: errorMsg,
-                    errorMessage: errorMsg,
-                    errorStack: errorStack,
-                  });
-                } catch (logErr) {
-                  console.error(`[AOF] [BUG-003] Failed to log action.completed: ${(logErr as Error).message}`);
-                }
-                
-                // Don't count as executed if exception occurred, mark as failed
-                failed = true;
-              }
-            }
-            // If no executor, assign action is just logged (not executed)
+          case "assign": {
+            // AOF-8s8: Extracted to task-dispatcher.ts
+            const effectiveConcurrencyLimitRef = { value: effectiveConcurrencyLimit };
+            const result = await executeAssignAction(
+              action,
+              store,
+              logger,
+              config,
+              allTasks,
+              effectiveConcurrencyLimitRef
+            );
+            executed = result.executed;
+            failed = result.failed;
+            effectiveConcurrencyLimit = effectiveConcurrencyLimitRef.value;
             break;
+          }
           case "promote": {
             const { taskId, fromStatus, toStatus } = action;
             await store.transition(taskId, toStatus as TaskStatus, {
