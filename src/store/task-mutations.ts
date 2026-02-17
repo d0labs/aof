@@ -5,8 +5,10 @@
  * They accept store methods as parameters to avoid circular dependencies.
  */
 
+import { rename } from "node:fs/promises";
 import writeFileAtomic from "write-file-atomic";
 import type { Task, TaskStatus } from "../schemas/task.js";
+import { isValidTransition } from "../schemas/task.js";
 import { contentHash, serializeTask } from "./task-parser.js";
 
 export interface UpdatePatch {
@@ -101,5 +103,115 @@ export async function updateTask(
     });
   }
 
+  return task;
+}
+
+export interface TransitionOpts {
+  reason?: string;
+  agent?: string;
+}
+
+export interface TaskStoreHooks {
+  afterTransition?: (task: Task, previousStatus: TaskStatus) => Promise<void>;
+}
+
+export interface TaskLogger {
+  logTransition(
+    taskId: string,
+    fromStatus: TaskStatus,
+    toStatus: TaskStatus,
+    actor: string,
+    reason?: string,
+  ): Promise<void>;
+  log(event: string, actor: string, data: { taskId: string; payload: unknown }): Promise<void>;
+}
+
+/**
+ * Transition task to a new status.
+ * Standalone function extracted from FilesystemTaskStore.transition().
+ */
+export async function transitionTask(
+  id: string,
+  newStatus: TaskStatus,
+  opts: TransitionOpts | undefined,
+  getTask: (id: string) => Promise<Task | null>,
+  getTaskPath: (id: string, status: TaskStatus) => string,
+  getTaskDir: (id: string, status: TaskStatus) => string,
+  logger?: TaskLogger,
+  hooks?: TaskStoreHooks,
+): Promise<Task> {
+  const task = await getTask(id);
+  if (!task) {
+    throw new Error(`Task not found: ${id}`);
+  }
+
+  const currentStatus = task.frontmatter.status;
+
+  // Idempotent: if already in target state, return early (no-op)
+  if (currentStatus === newStatus) {
+    return task;
+  }
+
+  if (!isValidTransition(currentStatus, newStatus)) {
+    throw new Error(
+      `Invalid transition: ${currentStatus} → ${newStatus} for task ${id}`,
+    );
+  }
+
+  const now = new Date().toISOString();
+  task.frontmatter.status = newStatus;
+  task.frontmatter.updatedAt = now;
+  task.frontmatter.lastTransitionAt = now;
+
+  // Clear lease on terminal states and when returning to ready
+  if (newStatus === "done" || newStatus === "ready" || newStatus === "backlog") {
+    task.frontmatter.lease = undefined;
+  }
+
+  const oldPath = task.path ?? getTaskPath(id, currentStatus);
+  const newPath = getTaskPath(id, newStatus);
+
+  if (oldPath !== newPath) {
+    // Atomic transition: write to old location first, then rename
+    // This ensures the file is never missing during the transition
+    await writeFileAtomic(oldPath, serializeTask(task));
+    
+    // Atomic move to new location
+    await rename(oldPath, newPath);
+
+    // Move companion directories if present
+    const oldDir = getTaskDir(id, currentStatus);
+    const newDir = getTaskDir(id, newStatus);
+    try {
+      await rename(oldDir, newDir);
+    } catch {
+      // Companion directory missing — ignore
+    }
+  } else {
+    // Same location, just update content atomically
+    await writeFileAtomic(newPath, serializeTask(task));
+  }
+
+  task.path = newPath;
+  
+  // Emit transition event
+  if (logger) {
+    await logger.logTransition(id, currentStatus, newStatus, opts?.agent ?? "system", opts?.reason);
+  }
+  
+  // Emit task.assigned event if transitioning to in-progress with an agent
+  if (newStatus === "in-progress" && opts?.agent) {
+    if (logger) {
+      await logger.log("task.assigned", opts.agent, {
+        taskId: id,
+        payload: { agent: opts.agent },
+      });
+    }
+  }
+  
+  if (hooks?.afterTransition) {
+    await hooks.afterTransition(task, currentStatus);
+  }
+  
   return task;
 }

@@ -20,7 +20,7 @@ import { hasCycle, addDependency, removeDependency } from "./task-deps.js";
 import { lintTasks } from "./task-validation.js";
 import { getTaskInputs as getInputs, getTaskOutputs as getOutputs, writeTaskOutput as writeOutput } from "./task-file-ops.js";
 import { blockTask, unblockTask, cancelTask } from "./task-lifecycle.js";
-import { updateTask, type UpdatePatch } from "./task-mutations.js";
+import { updateTask, type UpdatePatch, transitionTask, type TransitionOpts } from "./task-mutations.js";
 
 const FRONTMATTER_FENCE = "---";
 
@@ -318,81 +318,18 @@ export class FilesystemTaskStore implements ITaskStore {
   async transition(
     id: string,
     newStatus: TaskStatus,
-    opts?: { reason?: string; agent?: string },
+    opts?: TransitionOpts,
   ): Promise<Task> {
-    const task = await this.get(id);
-    if (!task) {
-      throw new Error(`Task not found: ${id}`);
-    }
-
-    const currentStatus = task.frontmatter.status;
-
-    // Idempotent: if already in target state, return early (no-op)
-    if (currentStatus === newStatus) {
-      return task;
-    }
-
-    if (!isValidTransition(currentStatus, newStatus)) {
-      throw new Error(
-        `Invalid transition: ${currentStatus} → ${newStatus} for task ${id}`,
-      );
-    }
-
-    const now = new Date().toISOString();
-    task.frontmatter.status = newStatus;
-    task.frontmatter.updatedAt = now;
-    task.frontmatter.lastTransitionAt = now;
-
-    // Clear lease on terminal states and when returning to ready
-    if (newStatus === "done" || newStatus === "ready" || newStatus === "backlog") {
-      task.frontmatter.lease = undefined;
-    }
-
-    const oldPath = task.path ?? this.taskPath(id, currentStatus);
-    const newPath = this.taskPath(id, newStatus);
-
-    if (oldPath !== newPath) {
-      // Atomic transition: write to old location first, then rename
-      // This ensures the file is never missing during the transition
-      await writeFileAtomic(oldPath, serializeTask(task));
-      
-      // Atomic move to new location
-      await rename(oldPath, newPath);
-
-      // Move companion directories if present
-      const oldDir = this.taskDir(id, currentStatus);
-      const newDir = this.taskDir(id, newStatus);
-      try {
-        await rename(oldDir, newDir);
-      } catch {
-        // Companion directory missing — ignore
-      }
-    } else {
-      // Same location, just update content atomically
-      await writeFileAtomic(newPath, serializeTask(task));
-    }
-
-    task.path = newPath;
-    
-    // Emit transition event
-    if (this.logger) {
-      await this.logger.logTransition(id, currentStatus, newStatus, opts?.agent ?? "system", opts?.reason);
-    }
-    
-    // Emit task.assigned event if transitioning to in-progress with an agent
-    if (newStatus === "in-progress" && opts?.agent) {
-      if (this.logger) {
-        await this.logger.log("task.assigned", opts.agent, {
-          taskId: id,
-          payload: { agent: opts.agent },
-        });
-      }
-    }
-    
-    if (this.hooks?.afterTransition) {
-      await this.hooks.afterTransition(task, currentStatus);
-    }
-    return task;
+    return transitionTask(
+      id,
+      newStatus,
+      opts,
+      this.get.bind(this),
+      this.taskPath.bind(this),
+      this.taskDir.bind(this),
+      this.logger,
+      this.hooks,
+    );
   }
 
   /**
