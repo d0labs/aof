@@ -11,6 +11,7 @@
  */
 
 import type { OrgChart, OrgAgent } from "../schemas/org-chart.js";
+import { checkMemoryTiers, checkContextBudgetPolicy } from "./linter-helpers.js";
 
 export interface LintIssue {
   severity: "error" | "warning";
@@ -337,75 +338,38 @@ export function lintOrgChart(chart: OrgChart): LintIssue[] {
     }
   }
 
-  // P1.1: Validate memory tier combinations (no cold in warm)
-  function checkMemoryTiers(tiers: string[] | undefined, path: string) {
-    if (!tiers) return;
-    const hasCold = tiers.includes("cold");
-    const hasWarmOrHot = tiers.includes("warm") || tiers.includes("hot");
-    if (hasCold && hasWarmOrHot) {
-      issues.push({
-        severity: "error",
-        rule: "no-cold-in-warm",
-        message: `Memory policy cannot mix cold tier with warm/hot tiers`,
-        path,
-      });
-    }
-  }
-
-  // Validate context budget policy thresholds (target <= warn <= critical)
-  function checkContextBudgetPolicy(
-    policy: { target: number; warn: number; critical: number } | undefined,
-    path: string
-  ) {
-    if (!policy) return;
-
-    if (policy.target > policy.warn) {
-      issues.push({
-        severity: "error",
-        rule: "valid-context-budget-thresholds",
-        message: `Context budget policy target (${policy.target}) must be <= warn (${policy.warn})`,
-        path,
-      });
-    }
-
-    if (policy.warn > policy.critical) {
-      issues.push({
-        severity: "error",
-        rule: "valid-context-budget-thresholds",
-        message: `Context budget policy warn (${policy.warn}) must be <= critical (${policy.critical})`,
-        path,
-      });
-    }
-  }
-
   // Check agent-level policies
   for (const agent of chart.agents) {
     if (agent.policies?.memory) {
-      checkMemoryTiers(
+      const issue = checkMemoryTiers(
         agent.policies.memory.tiers,
         `agents.${agent.id}.policies.memory.tiers`
       );
+      if (issue) issues.push(issue);
     }
     if (agent.policies?.context) {
-      checkContextBudgetPolicy(
+      const policyIssues = checkContextBudgetPolicy(
         agent.policies.context,
         `agents.${agent.id}.policies.context`
       );
+      issues.push(...policyIssues);
     }
   }
 
   // Check default policies
   if (chart.defaults?.policies?.memory) {
-    checkMemoryTiers(
+    const issue = checkMemoryTiers(
       chart.defaults.policies.memory.tiers,
       "defaults.policies.memory.tiers"
     );
+    if (issue) issues.push(issue);
   }
   if (chart.defaults?.policies?.context) {
-    checkContextBudgetPolicy(
+    const policyIssues = checkContextBudgetPolicy(
       chart.defaults.policies.context,
       "defaults.policies.context"
     );
+    issues.push(...policyIssues);
   }
 
   // Memory V2: validate memoryPools
