@@ -97,3 +97,105 @@ export function buildResourceOccupancyMap(allTasks: Task[]): Map<string, string>
   
   return occupiedResources;
 }
+
+/**
+ * Check backlog tasks for promotion eligibility.
+ */
+export function checkBacklogPromotion(
+  allTasks: Task[],
+  childrenByParent: Map<string, Task[]>,
+  checkPromotionEligibility: (task: Task, allTasks: Task[], childrenByParent: Map<string, Task[]>) => { eligible: boolean; reason?: string }
+): SchedulerAction[] {
+  const actions: SchedulerAction[] = [];
+  const backlogTasks = allTasks.filter(t => t.frontmatter.status === "backlog");
+  
+  for (const task of backlogTasks) {
+    const canPromote = checkPromotionEligibility(task, allTasks, childrenByParent);
+    
+    if (canPromote.eligible) {
+      actions.push({
+        type: "promote",
+        taskId: task.frontmatter.id,
+        taskTitle: task.frontmatter.title,
+        reason: "Auto-promotion: all requirements met",
+        fromStatus: "backlog",
+        toStatus: "ready",
+      });
+    }
+  }
+  
+  return actions;
+}
+
+/**
+ * Check blocked tasks for unblocking/recovery.
+ * Handles both dependency-based blocks and dispatch-failure retries.
+ */
+export function checkBlockedTaskRecovery(
+  allTasks: Task[],
+  childrenByParent: Map<string, Task[]>
+): SchedulerAction[] {
+  const actions: SchedulerAction[] = [];
+  const blockedTasksForRecovery = allTasks.filter(t => t.frontmatter.status === "blocked");
+  
+  for (const task of blockedTasksForRecovery) {
+    const deps = task.frontmatter.dependsOn;
+    const childTasks = childrenByParent.get(task.frontmatter.id) ?? [];
+    const hasGate = deps.length > 0 || childTasks.length > 0;
+
+    // BUG-002: Check for dispatch failure recovery (tasks blocked due to spawn failures)
+    const retryCount = (task.frontmatter.metadata?.retryCount as number) ?? 0;
+    const lastBlockedAt = task.frontmatter.metadata?.lastBlockedAt as string | undefined;
+    const blockReason = task.frontmatter.metadata?.blockReason as string | undefined;
+    const maxRetries = 3; // Maximum retry attempts
+    const retryDelayMs = 5 * 60 * 1000; // 5 minutes between retries
+
+    // Check if this is a dispatch-failure block (not dependency-based)
+    const isDispatchFailure = blockReason?.includes("spawn_failed") ?? false;
+
+    if (isDispatchFailure && retryCount < maxRetries) {
+      // Check if enough time has passed for retry
+      if (lastBlockedAt) {
+        const blockedAge = Date.now() - new Date(lastBlockedAt).getTime();
+        if (blockedAge >= retryDelayMs) {
+          actions.push({
+            type: "requeue",
+            taskId: task.frontmatter.id,
+            taskTitle: task.frontmatter.title,
+            reason: `Retry attempt ${retryCount + 1}/${maxRetries} after dispatch failure`,
+          });
+          continue; // Skip dependency check for dispatch-failure tasks
+        }
+      }
+    } else if (isDispatchFailure && retryCount >= maxRetries) {
+      // Max retries exceeded - emit alert
+      actions.push({
+        type: "alert",
+        taskId: task.frontmatter.id,
+        taskTitle: task.frontmatter.title,
+        reason: `Max retries (${maxRetries}) exceeded for dispatch failures — manual intervention required`,
+      });
+      continue; // Skip dependency check
+    }
+
+    // Dependency-based unblocking (existing logic)
+    if (!hasGate) continue;
+
+    const allDepsResolved = deps.every(depId => {
+      const dep = allTasks.find(t => t.frontmatter.id === depId);
+      return dep?.frontmatter.status === "done";
+    });
+    const allSubtasksResolved = childTasks.every(child => child.frontmatter.status === "done");
+
+    if (allDepsResolved && allSubtasksResolved) {
+      actions.push({
+        type: "requeue",
+        taskId: task.frontmatter.id,
+        taskTitle: task.frontmatter.title,
+        reason: "All dependencies resolved — can be requeued",
+      });
+    }
+  }
+  
+  return actions;
+}

@@ -32,7 +32,7 @@ import { escalateGateTimeout, checkGateTimeouts } from "./escalation.js";
 import { buildDispatchActions } from "./task-dispatcher.js";
 import { checkPromotionEligibility } from "./promotion.js";
 import { executeActions } from "./action-executor.js";
-import { buildTaskStats, buildChildrenMap, checkExpiredLeases, buildResourceOccupancyMap } from "./scheduler-helpers.js";
+import { buildTaskStats, buildChildrenMap, checkExpiredLeases, buildResourceOccupancyMap, checkBacklogPromotion, checkBlockedTaskRecovery } from "./scheduler-helpers.js";
 
 export interface SchedulerConfig {
   /** Root data directory. */
@@ -221,23 +221,8 @@ export async function poll(
   actions.push(...timeoutActions);
 
   // 3.1. Check for backlog tasks that can be promoted
-  const backlogTasks = allTasks.filter(t => t.frontmatter.status === "backlog");
-  
-  for (const task of backlogTasks) {
-    // Check promotion eligibility
-    const canPromote = checkPromotionEligibility(task, allTasks, childrenByParent);
-    
-    if (canPromote.eligible) {
-      actions.push({
-        type: "promote",
-        taskId: task.frontmatter.id,
-        taskTitle: task.frontmatter.title,
-        reason: "Auto-promotion: all requirements met",
-        fromStatus: "backlog",
-        toStatus: "ready",
-      });
-    }
-  }
+  const promotionActions = checkBacklogPromotion(allTasks, childrenByParent, checkPromotionEligibility);
+  actions.push(...promotionActions);
 
   // 4. Check for ready tasks that can be assigned (AOF-8s8: extracted to task-dispatcher.ts)
   const readyTasks = allTasks.filter(t => t.frontmatter.status === "ready");
@@ -259,65 +244,8 @@ export async function poll(
   actions.push(...dispatchActions);
 
   // 5. Check for blocked tasks that might be unblocked
-  const blockedTasksForRecovery = allTasks.filter(t => t.frontmatter.status === "blocked");
-  for (const task of blockedTasksForRecovery) {
-    const deps = task.frontmatter.dependsOn;
-    const childTasks = childrenByParent.get(task.frontmatter.id) ?? [];
-    const hasGate = deps.length > 0 || childTasks.length > 0;
-
-    // BUG-002: Check for dispatch failure recovery (tasks blocked due to spawn failures)
-    const retryCount = (task.frontmatter.metadata?.retryCount as number) ?? 0;
-    const lastBlockedAt = task.frontmatter.metadata?.lastBlockedAt as string | undefined;
-    const blockReason = task.frontmatter.metadata?.blockReason as string | undefined;
-    const maxRetries = 3; // Maximum retry attempts
-    const retryDelayMs = 5 * 60 * 1000; // 5 minutes between retries
-
-    // Check if this is a dispatch-failure block (not dependency-based)
-    const isDispatchFailure = blockReason?.includes("spawn_failed") ?? false;
-
-    if (isDispatchFailure && retryCount < maxRetries) {
-      // Check if enough time has passed for retry
-      if (lastBlockedAt) {
-        const blockedAge = Date.now() - new Date(lastBlockedAt).getTime();
-        if (blockedAge >= retryDelayMs) {
-          actions.push({
-            type: "requeue",
-            taskId: task.frontmatter.id,
-            taskTitle: task.frontmatter.title,
-            reason: `Retry attempt ${retryCount + 1}/${maxRetries} after dispatch failure`,
-          });
-          continue; // Skip dependency check for dispatch-failure tasks
-        }
-      }
-    } else if (isDispatchFailure && retryCount >= maxRetries) {
-      // Max retries exceeded - emit alert
-      actions.push({
-        type: "alert",
-        taskId: task.frontmatter.id,
-        taskTitle: task.frontmatter.title,
-        reason: `Max retries (${maxRetries}) exceeded for dispatch failures — manual intervention required`,
-      });
-      continue; // Skip dependency check
-    }
-
-    // Dependency-based unblocking (existing logic)
-    if (!hasGate) continue;
-
-    const allDepsResolved = deps.every(depId => {
-      const dep = allTasks.find(t => t.frontmatter.id === depId);
-      return dep?.frontmatter.status === "done";
-    });
-    const allSubtasksResolved = childTasks.every(child => child.frontmatter.status === "done");
-
-    if (allDepsResolved && allSubtasksResolved) {
-      actions.push({
-        type: "requeue",
-        taskId: task.frontmatter.id,
-        taskTitle: task.frontmatter.title,
-        reason: "All dependencies resolved — can be requeued",
-      });
-    }
-  }
+  const recoveryActions = checkBlockedTaskRecovery(allTasks, childrenByParent);
+  actions.push(...recoveryActions);
   // 6. Execute actions (only in active mode)
   const effectiveConcurrencyLimitRef = { value: effectiveConcurrencyLimit };
   const executionStats = await executeActions(
