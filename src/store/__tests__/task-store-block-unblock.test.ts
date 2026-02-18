@@ -215,4 +215,36 @@ describe("TaskStore block/unblock", () => {
       expect(blocked2.frontmatter.metadata.blockReason).toBe("Second block");
     });
   });
+
+  describe("XRAY-004: stale lease cleared on unblock", () => {
+    it("clears stale lease when unblocking to ready", async () => {
+      const task = await store.create({ title: "XRAY-004 regression", createdBy: "main" });
+      const id = task.frontmatter.id;
+
+      await store.transition(id, "ready");
+      await store.transition(id, "in-progress", { agent: "test-agent" });
+      await store.block(id, "Upstream blocked");
+
+      // Inject a stale lease on the blocked task (simulates the bug scenario)
+      const blocked = await store.get(id);
+      blocked!.frontmatter.lease = {
+        agent: "test-agent",
+        acquiredAt: new Date(Date.now() - 3_600_000).toISOString(),
+        expiresAt: new Date(Date.now() - 1_800_000).toISOString(),
+        renewCount: 0,
+      };
+      const wfa = (await import("write-file-atomic")).default;
+      const { serializeTask } = await import("../task-parser.js");
+      await wfa(blocked!.path!, serializeTask(blocked!));
+
+      // Unblock → ready: lease must be cleared
+      const recovered = await store.unblock(id);
+      expect(recovered.frontmatter.status).toBe("ready");
+      expect(recovered.frontmatter.lease).toBeUndefined();
+
+      // Verify on disk
+      const reloaded = await store.get(id);
+      expect(reloaded!.frontmatter.lease).toBeUndefined();
+    });
+  });
 });

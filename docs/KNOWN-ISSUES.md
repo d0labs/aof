@@ -42,8 +42,7 @@
 **Date**: 2026-02-16
 **Symptoms**: Task moved from `blocked` to `ready` but scheduler reports `no_executable_actions`. Task sits in ready indefinitely.
 **Root cause**: Task file retained `lease:` block from previous dispatch. Scheduler sees active lease and won't re-dispatch even though status is `ready`.
-**Fix**: Clear the `lease:` block from task frontmatter when moving out of `blocked` state.
-**Prevention**: AOF scheduler should strip lease metadata on status transitions to `ready`. **TODO**: Fix in AOF code — `handleBlockedTask()` should clear lease on recovery.
+**Status**: RESOLVED (2026-02-18) — `transitionTask()` in `task-mutations.ts` clears `lease` frontmatter field whenever `newStatus === "ready"` (also `done` and `backlog`). Regression test added in `task-store-block-unblock.test.ts`.
 
 ---
 
