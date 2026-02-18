@@ -2,6 +2,7 @@
   "id": "aof",
   "name": "AOF — Agentic Ops Fabric",
   "version": "0.1.0",
+  "kind": "memory",
   "description": "Deterministic task orchestration layer for multi-agent systems. Provides filesystem-first kanban, context-aware dispatch, org chart governance, and real-time views.",
   "main": "dist/plugin.js",
   "configSchema": {
@@ -41,6 +42,122 @@
         "minimum": 1,
         "maximum": 50,
         "description": "Maximum concurrent dispatched tasks (default: 3)"
+      },
+      "modules": {
+        "type": "object",
+        "properties": {
+          "memory": {
+            "type": "object",
+            "properties": {
+              "enabled": {
+                "type": "boolean",
+                "default": true
+              }
+            }
+          },
+          "dispatch": {
+            "type": "object",
+            "properties": {
+              "enabled": {
+                "type": "boolean",
+                "default": true
+              }
+            }
+          },
+          "murmur": {
+            "type": "object",
+            "properties": {
+              "enabled": {
+                "type": "boolean",
+                "default": true
+              }
+            }
+          },
+          "linter": {
+            "type": "object",
+            "properties": {
+              "enabled": {
+                "type": "boolean",
+                "default": true
+              }
+            }
+          }
+        }
+      },
+      "memory": {
+        "type": "object",
+        "properties": {
+          "embedding": {
+            "type": "object",
+            "properties": {
+              "provider": {
+                "type": "string",
+                "enum": ["openai", "ollama"]
+              },
+              "model": {
+                "type": "string"
+              },
+              "baseUrl": {
+                "type": "string"
+              },
+              "apiKey": {
+                "type": "string"
+              },
+              "dimensions": {
+                "type": "number"
+              }
+            }
+          },
+          "search": {
+            "type": "object",
+            "properties": {
+              "hybridEnabled": {
+                "type": "boolean",
+                "default": true
+              },
+              "vectorWeight": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1,
+                "default": 0.7
+              },
+              "bm25Weight": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1,
+                "default": 0.3
+              },
+              "maxResults": {
+                "type": "number",
+                "minimum": 1,
+                "default": 10
+              },
+              "tierBoost": {
+                "type": "object",
+                "properties": {
+                  "hot": {
+                    "type": "number",
+                    "default": 1.0
+                  },
+                  "warm": {
+                    "type": "number",
+                    "default": 0.8
+                  },
+                  "cold": {
+                    "type": "number",
+                    "default": 0.5
+                  }
+                }
+              }
+            }
+          },
+          "indexPaths": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
       }
     }
   }
