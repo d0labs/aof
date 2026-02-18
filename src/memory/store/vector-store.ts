@@ -1,5 +1,7 @@
 import type Database from "better-sqlite3";
 
+import { parseTags, serializeTags } from "./tag-serialization";
+
 const INSERT_CHUNK_SQL = `
   INSERT INTO chunks (
     file_path,
@@ -279,27 +281,4 @@ function mapChunkRow(row: ChunkRow): VectorChunkRecord {
   };
 }
 
-function serializeTags(tags?: string[] | null): string | null {
-  if (!tags || tags.length === 0) {
-    return null;
-  }
-
-  return JSON.stringify(tags);
-}
-
-function parseTags(tags: string | null): string[] | null {
-  if (!tags) {
-    return null;
-  }
-
-  try {
-    const parsed = JSON.parse(tags) as unknown;
-    if (Array.isArray(parsed) && parsed.every((tag) => typeof tag === "string")) {
-      return parsed;
-    }
-  } catch (error) {
-    return [tags];
-  }
-
-  return [tags];
-}
+// tag serialization helpers moved to tag-serialization.ts
