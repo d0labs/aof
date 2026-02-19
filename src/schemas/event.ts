@@ -45,6 +45,9 @@ export const EventType = z.enum([
   "dispatch.no-match",
   "dispatch.fallback",
   "dispatch.error",
+
+  // Dependencies
+  "dependency.cascaded",  // A dependency status change cascaded to dependents
   
   // Gate workflow
   "gate_transition",

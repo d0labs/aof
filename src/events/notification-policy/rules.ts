@@ -131,6 +131,24 @@ export const DEFAULT_RULES: NotificationRule[] = [
     template: "✂️ Dependency removed from {taskId}: {payload.depId}",
   },
 
+  // ── Dependency cascade ───────────────────────────────────────────────────
+  {
+    match: { eventType: "dependency.cascaded", payload: { action: "promote" } },
+    severity: "info",
+    audience: ["operator"],
+    channel: "#aof-dispatch",
+    template: "🔗 Cascade: {payload.count} task(s) promoted after {payload.trigger} completed",
+    dedupeWindowMs: 30_000,
+  },
+  {
+    match: { eventType: "dependency.cascaded", payload: { action: "block" } },
+    severity: "warn",
+    audience: ["team-lead", "operator"],
+    channel: "#aof-alerts",
+    template: "🚧 Cascade block: {payload.count} task(s) blocked — upstream {payload.trigger} is blocked",
+    dedupeWindowMs: 0,
+  },
+
   // ── Lease management ─────────────────────────────────────────────────────
   {
     match: { eventType: "lease.expired" },
