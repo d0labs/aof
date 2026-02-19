@@ -98,6 +98,7 @@ export const EventType = z.enum([
   "protocol.message.received",
   "protocol.message.rejected",
   "protocol.message.unknown",
+  "protocol.message.warning",
 
   // Actions
   "action.started",
