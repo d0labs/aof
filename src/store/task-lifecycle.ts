@@ -123,8 +123,9 @@ export async function unblockTask(
     throw new Error(`Cannot unblock task ${id} that is not blocked (current status: ${currentStatus})`);
   }
 
-  // Clear block reason from metadata
+  // Clear block reason and retry count from metadata (XRAY-006)
   delete task.frontmatter.metadata.blockReason;
+  delete task.frontmatter.metadata.retryCount;
 
   // First update the metadata, then transition
   const filePath = task.path ?? taskPath(id, currentStatus);

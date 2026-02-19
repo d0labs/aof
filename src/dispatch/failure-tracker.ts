@@ -107,8 +107,9 @@ export async function resetDispatchFailures(
     throw new Error(`Task not found: ${taskId}`);
   }
 
-  // Reset failure tracking
+  // Reset failure tracking (XRAY-006: include retryCount)
   task.frontmatter.metadata.dispatchFailures = 0;
+  delete task.frontmatter.metadata.retryCount;
   delete task.frontmatter.metadata.lastDispatchFailureReason;
   delete task.frontmatter.metadata.lastDispatchFailureAt;
   task.frontmatter.updatedAt = new Date().toISOString();
