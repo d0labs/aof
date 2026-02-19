@@ -41,6 +41,7 @@
     "better-sqlite3": "^12.6.2",
     "commander": "^14.0.3",
     "gray-matter": "^4.0.3",
+    "hnswlib-node": "^3.0.0",
     "prom-client": "^15.1.3",
     "sqlite-vec": "^0.1.7-alpha.2",
     "write-file-atomic": "^7.0.0",
@@ -136,7 +137,10 @@
               "properties": {
                 "provider": {
                   "type": "string",
-                  "enum": ["openai", "ollama"]
+                  "enum": [
+                    "openai",
+                    "ollama"
+                  ]
                 },
                 "model": {
                   "type": "string"
@@ -181,7 +185,7 @@
                   "properties": {
                     "hot": {
                       "type": "number",
-                      "default": 1.0
+                      "default": 1
                     },
                     "warm": {
                       "type": "number",

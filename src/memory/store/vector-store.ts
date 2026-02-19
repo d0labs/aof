@@ -1,6 +1,7 @@
 import type { SqliteDb } from "../types.js";
 
 import { parseTags, serializeTags } from "./tag-serialization.js";
+import type { HnswIndex } from "./hnsw-index.js";
 
 const INSERT_CHUNK_SQL = `
   INSERT INTO chunks (
@@ -24,6 +25,7 @@ const DELETE_VECTORS_BY_FILE_SQL =
   "DELETE FROM vec_chunks WHERE chunk_id IN (SELECT id FROM chunks WHERE file_path = ?)";
 const DELETE_CHUNK_SQL = "DELETE FROM chunks WHERE id = ?";
 const DELETE_CHUNKS_BY_FILE_SQL = "DELETE FROM chunks WHERE file_path = ?";
+const GET_CHUNK_IDS_BY_FILE_SQL = "SELECT id FROM chunks WHERE file_path = ?";
 
 const GET_CHUNK_SQL = `
   SELECT
@@ -133,6 +135,7 @@ const CHUNK_UPDATE_COLUMNS: Record<
 
 export class VectorStore {
   private readonly db: SqliteDb;
+  private readonly hnsw: HnswIndex | null;
 
   private readonly insertChunkStmt;
   private readonly insertVectorStmt;
@@ -141,11 +144,13 @@ export class VectorStore {
   private readonly deleteVectorsByFileStmt;
   private readonly deleteChunkStmt;
   private readonly deleteChunksByFileStmt;
+  private readonly getChunkIdsByFileStmt;
   private readonly getChunkStmt;
   private readonly searchStmt;
 
-  constructor(db: SqliteDb) {
+  constructor(db: SqliteDb, hnsw: HnswIndex | null = null) {
     this.db = db;
+    this.hnsw = hnsw;
     this.insertChunkStmt = db.prepare(INSERT_CHUNK_SQL);
     this.insertVectorStmt = db.prepare(INSERT_VECTOR_SQL);
     this.updateVectorStmt = db.prepare(UPDATE_VECTOR_SQL);
@@ -153,6 +158,7 @@ export class VectorStore {
     this.deleteVectorsByFileStmt = db.prepare(DELETE_VECTORS_BY_FILE_SQL);
     this.deleteChunkStmt = db.prepare(DELETE_CHUNK_SQL);
     this.deleteChunksByFileStmt = db.prepare(DELETE_CHUNKS_BY_FILE_SQL);
+    this.getChunkIdsByFileStmt = db.prepare(GET_CHUNK_IDS_BY_FILE_SQL);
     this.getChunkStmt = db.prepare(GET_CHUNK_SQL);
     this.searchStmt = db.prepare(SEARCH_SQL);
   }
@@ -186,7 +192,11 @@ export class VectorStore {
       return chunkId;
     });
 
-    return insert();
+    const chunkId = insert();
+
+    this.hnsw?.add(chunkId, input.embedding);
+
+    return chunkId;
   }
 
   getChunk(id: number): VectorChunkRecord | null {
@@ -212,6 +222,7 @@ export class VectorStore {
         new Float32Array(update.embedding),
         toVecChunkId(id)
       );
+      this.hnsw?.update(id, update.embedding);
     }
   }
 
@@ -222,16 +233,31 @@ export class VectorStore {
     });
 
     remove();
+    this.hnsw?.remove(id);
   }
 
   deleteChunksByFile(filePath: string): number {
+    const chunkIds = this.hnsw
+      ? (this.getChunkIdsByFileStmt.all(filePath) as Array<{ id: number }>).map(
+          (row) => row.id
+        )
+      : null;
+
     const remove = this.db.transaction(() => {
       this.deleteVectorsByFileStmt.run(filePath);
       const result = this.deleteChunksByFileStmt.run(filePath);
       return result.changes;
     });
 
-    return remove();
+    const count = remove();
+
+    if (chunkIds) {
+      for (const id of chunkIds) {
+        this.hnsw!.remove(id);
+      }
+    }
+
+    return count;
   }
 
   search(embedding: number[], limit: number): VectorSearchResult[] {
@@ -240,6 +266,51 @@ export class VectorStore {
     }
 
     const k = Math.floor(limit);
+
+    if (this.hnsw) {
+      return this.searchWithHnsw(embedding, k);
+    }
+
+    return this.searchWithSqliteVec(embedding, k);
+  }
+
+  // ─── Private helpers ─────────────────────────────────────────────────────
+
+  private searchWithHnsw(embedding: number[], k: number): VectorSearchResult[] {
+    const hits = this.hnsw!.search(embedding, k);
+    if (hits.length === 0) return [];
+
+    const distanceById = new Map(hits.map((h) => [h.id, h.distance]));
+    const ids = hits.map((h) => h.id);
+
+    const placeholders = ids.map(() => "?").join(", ");
+    const sql = `
+      SELECT
+        id,
+        file_path as filePath,
+        chunk_index as chunkIndex,
+        content,
+        tier,
+        pool,
+        importance,
+        tags,
+        created_at as createdAt,
+        updated_at as updatedAt,
+        accessed_at as accessedAt
+      FROM chunks
+      WHERE id IN (${placeholders})
+    `;
+    const rows = this.db.prepare(sql).all(...ids) as ChunkRow[];
+
+    return rows
+      .map((row) => ({
+        ...mapChunkRow(row),
+        distance: distanceById.get(row.id) ?? 0,
+      }))
+      .sort((a, b) => a.distance - b.distance);
+  }
+
+  private searchWithSqliteVec(embedding: number[], k: number): VectorSearchResult[] {
     const rows = this.searchStmt.all(
       new Float32Array(embedding),
       k

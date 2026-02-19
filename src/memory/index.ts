@@ -1,8 +1,11 @@
 import { join } from "node:path";
 import { homedir } from "node:os";
 import type { OpenClawApi } from "../openclaw/types.js";
+import type { SqliteDb } from "./types.js";
+import { existsSync } from "node:fs";
 import { initMemoryDb } from "./store/schema.js";
 import { VectorStore } from "./store/vector-store.js";
+import { HnswIndex } from "./store/hnsw-index.js";
 import { FtsStore } from "./store/fts-store.js";
 import { HybridSearchEngine } from "./store/hybrid-search.js";
 import { OpenAIEmbeddingProvider } from "./embeddings/openai-provider.js";
@@ -49,6 +52,20 @@ function _expandPath(p: string): string {
   return p.replace(/^~(?=$|[/\\])/, homedir());
 }
 
+/** Rebuild the HNSW index from all embeddings stored in sqlite vec_chunks. */
+function rebuildHnswFromDb(db: SqliteDb, hnsw: HnswIndex): void {
+  const rows = db
+    .prepare("SELECT chunk_id, embedding FROM vec_chunks")
+    .all() as Array<{ chunk_id: bigint; embedding: Buffer }>;
+
+  const chunks = rows.map((row) => ({
+    id: Number(row.chunk_id),
+    embedding: Array.from(new Float32Array(row.embedding.buffer)),
+  }));
+
+  hnsw.rebuild(chunks);
+}
+
 export function registerMemoryModule(api: OpenClawApi): void {
   const raw = api.pluginConfig as _PluginConfig | undefined;
   const enabled = raw?.modules?.memory?.enabled ?? raw?.memory?.enabled ?? false;
@@ -63,7 +80,21 @@ export function registerMemoryModule(api: OpenClawApi): void {
   const dbPath = memoryCfg.dbPath ? _expandPath(memoryCfg.dbPath) : join(dataDir, "memory.db");
 
   const db = initMemoryDb(dbPath, dimensions);
-  const vectorStore = new VectorStore(db);
+
+  const hnswPath = dbPath.replace(/\.db$/, "-hnsw.dat");
+  const hnsw = new HnswIndex(dimensions);
+  if (existsSync(hnswPath)) {
+    try {
+      hnsw.load(hnswPath);
+    } catch {
+      // Corrupt or incompatible index — rebuild from sqlite below
+      rebuildHnswFromDb(db, hnsw);
+    }
+  } else {
+    rebuildHnswFromDb(db, hnsw);
+  }
+
+  const vectorStore = new VectorStore(db, hnsw);
   const ftsStore = new FtsStore(db);
   const searchEngine = new HybridSearchEngine(vectorStore, ftsStore);
 
@@ -104,6 +135,11 @@ export function registerMemoryModule(api: OpenClawApi): void {
     },
     stop: () => {
       syncService.stop();
+      try {
+        hnsw.save(hnswPath);
+      } catch {
+        // Non-critical: index will be rebuilt from sqlite on next start
+      }
     },
   });
 }

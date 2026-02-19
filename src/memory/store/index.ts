@@ -1,4 +1,6 @@
 export { initMemoryDb } from "./schema.js";
+export { HnswIndex } from "./hnsw-index.js";
+export type { HnswSearchResult } from "./hnsw-index.js";
 export { FtsStore } from "./fts-store.js";
 export { HybridSearchEngine } from "./hybrid-search.js";
 export { VectorStore } from "./vector-store.js";
