@@ -222,13 +222,7 @@ export class OpenClawExecutor implements DispatchExecutor {
 
   private async spawnAgentFallback(context: TaskContext, opts?: { timeoutMs?: number }): Promise<ExecutorResult> {
     if (!this.api.spawnAgent) {
-      console.error(`[AOF] [BUG-DISPATCH-001] OpenClaw API spawnAgent is NOT available`);
-      console.error(`[AOF] [BUG-DISPATCH-001]   This indicates an old OpenClaw version or plugin API mismatch`);
-      console.error(`[AOF] [BUG-DISPATCH-001]   REMEDIATION:`);
-      console.error(`[AOF] [BUG-DISPATCH-001]     1. Update OpenClaw to latest version (npm install -g openclaw@latest)`);
-      console.error(`[AOF] [BUG-DISPATCH-001]     2. Verify AOF plugin is compatible with installed OpenClaw version`);
-      console.error(`[AOF] [BUG-DISPATCH-001]     3. Check gateway logs for API surface warnings`);
-      console.error(`[AOF] [BUG-DISPATCH-001]   Task ${context.taskId} will be moved to blocked until fixed`);
+      console.error(`[AOF] spawnAgent API not available — update OpenClaw or check plugin compatibility (task: ${context.taskId})`);
       
       return {
         success: false,
@@ -236,7 +230,7 @@ export class OpenClawExecutor implements DispatchExecutor {
       };
     }
 
-    console.info(`[AOF] [BUG-001] api.spawnAgent is available, proceeding with spawn`);
+
 
     try {
       const taskInstruction = this.formatTaskInstruction(context);
@@ -256,11 +250,7 @@ export class OpenClawExecutor implements DispatchExecutor {
         timeoutMs: opts?.timeoutMs,
       };
 
-      console.info(`[AOF] [BUG-001] Calling api.spawnAgent with request: ${JSON.stringify(request)}`);
-
       const response = await this.api.spawnAgent(request);
-
-      console.info(`[AOF] [BUG-001] api.spawnAgent returned: ${JSON.stringify(response)}`);
 
       if (response.success) {
         return {
@@ -280,11 +270,7 @@ export class OpenClawExecutor implements DispatchExecutor {
       const errorMsg = error.message;
       const errorStack = error.stack ?? "No stack trace available";
 
-      console.error(`[AOF] [BUG-003] Exception in OpenClawExecutor.spawn():`);
-      console.error(`[AOF] [BUG-003]   Task: ${context.taskId}`);
-      console.error(`[AOF] [BUG-003]   Agent: ${context.agent}`);
-      console.error(`[AOF] [BUG-003]   Error: ${errorMsg}`);
-      console.error(`[AOF] [BUG-003]   Stack: ${errorStack}`);
+      console.error(`[AOF] Spawn exception for ${context.taskId} (agent: ${context.agent}): ${errorMsg}`);
 
       const platformLimit = this.parsePlatformLimitError(errorMsg);
       return {

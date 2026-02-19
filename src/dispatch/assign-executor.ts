@@ -56,11 +56,8 @@ export async function executeAssignAction(
   let executed = false;
   let failed = false;
 
-  // BUG-003: Log when executor is missing (but don't count as failed - nothing was attempted)
   if (!config.executor) {
-    console.error(`[AOF] [BUG-003] Cannot dispatch task ${action.taskId}: executor is undefined`);
-    console.error(`[AOF] [BUG-003]   Agent: ${action.agent}`);
-    console.error(`[AOF] [BUG-003]   Task will remain in ready/ until executor is configured`);
+    console.error(`[AOF] Cannot dispatch task ${action.taskId}: no executor configured (agent: ${action.agent})`);
     return { executed, failed };
   }
 
@@ -88,12 +85,9 @@ export async function executeAssignAction(
 
     const task = allTasks.find(t => t.frontmatter.id === action.taskId);
     if (!task) {
-      console.warn(`[AOF] [BUG-001] Task ${action.taskId} not found in allTasks, skipping dispatch`);
+      console.warn(`[AOF] Task ${action.taskId} not found in allTasks, skipping dispatch`);
       return { executed, failed };
     }
-
-    // BUG-001 diagnostic: Log before dispatch attempt
-    console.info(`[AOF] [BUG-001] Attempting dispatch for task ${action.taskId} with agent ${action.agent}`);
 
     // Log action start (non-fatal if logging fails)
     try {
@@ -101,17 +95,14 @@ export async function executeAssignAction(
         action: action.type,
         agent: action.agent,
       });
-    } catch (logErr) {
-      // BUG-003: Log the logging error itself
-      console.error(`[AOF] [BUG-003] Failed to log action.started: ${(logErr as Error).message}`);
+    } catch {
+      // Logging errors should not crash the scheduler
     }
 
     // Acquire lease first (this also transitions ready → in-progress)
-    console.info(`[AOF] [BUG-001] Acquiring lease for task ${action.taskId}`);
     const leasedTask = await acquireLease(store, action.taskId, action.agent!, {
       ttlMs: config.defaultLeaseTtlMs,
     });
-    console.info(`[AOF] [BUG-001] Lease acquired for task ${action.taskId}`);
 
     // Build task context using post-lease task path (now in-progress/)
     const taskPath =
@@ -148,17 +139,10 @@ export async function executeAssignAction(
       }
     }
 
-    // BUG-001 diagnostic: Log immediately before executor invocation
-    console.info(`[AOF] [BUG-001] Invoking executor.spawn() for task ${action.taskId}, agent ${action.agent}`);
-    console.info(`[AOF] [BUG-001] Context: ${JSON.stringify(context)}`);
-
     // Spawn agent session
     const result = await config.executor.spawn(context, {
       timeoutMs: config.spawnTimeoutMs ?? 30_000,
     });
-
-    // BUG-001 diagnostic: Log executor result
-    console.info(`[AOF] [BUG-001] Executor returned: ${JSON.stringify(result)}`);
 
     if (result.success) {
       try {
@@ -231,17 +215,13 @@ export async function executeAssignAction(
         return { executed, failed };
       }
       
-      // BUG-003: Log spawn failure with full context
-      console.error(`[AOF] [BUG-003] Executor spawn failed for task ${action.taskId}:`);
-      console.error(`[AOF] [BUG-003]   Agent: ${action.agent}`);
-      console.error(`[AOF] [BUG-003]   Error: ${result.error}`);
-      console.error(`[AOF] [BUG-003]   Task will be moved to blocked/`);
+      console.error(`[AOF] Spawn failed for ${action.taskId} (agent: ${action.agent}): ${result.error}`);
 
-      // BUG-002: Track retry count and timestamp in metadata
+      // Track retry count and timestamp in metadata
       const currentTask = await store.get(action.taskId);
       const retryCount = ((currentTask?.frontmatter.metadata?.retryCount as number) ?? 0) + 1;
       
-      // Update metadata before transition (BUG-002)
+      // Update metadata before transition
       if (currentTask) {
         currentTask.frontmatter.metadata = {
           ...currentTask.frontmatter.metadata,
@@ -268,11 +248,10 @@ export async function executeAssignAction(
           error: result.error,
           errorMessage: result.error,
         });
-      } catch (logErr) {
-        console.error(`[AOF] [BUG-003] Failed to log dispatch.error: ${(logErr as Error).message}`);
+      } catch {
+        // Logging errors should not crash the scheduler
       }
       
-      // Log action completion with failure
       try {
         await logger.logAction("action.completed", "scheduler", action.taskId, {
           action: action.type,
@@ -280,11 +259,11 @@ export async function executeAssignAction(
           error: result.error,
           errorMessage: result.error,
         });
-      } catch (logErr) {
-        console.error(`[AOF] [BUG-003] Failed to log action.completed: ${(logErr as Error).message}`);
+      } catch {
+        // Logging errors should not crash the scheduler
       }
       
-      // Do NOT count as executed when spawn fails (BUG-006 fix)
+      // Don't count as executed when spawn fails
       // executed remains false, mark as failed
       failed = true;
     }
@@ -293,11 +272,7 @@ export async function executeAssignAction(
     const errorMsg = error.message;
     const errorStack = error.stack ?? "No stack trace available";
     
-    // BUG-003: Log exception with full stack trace
-    console.error(`[AOF] [BUG-003] Exception during dispatch for task ${action.taskId}:`);
-    console.error(`[AOF] [BUG-003]   Agent: ${action.agent}`);
-    console.error(`[AOF] [BUG-003]   Error: ${errorMsg}`);
-    console.error(`[AOF] [BUG-003]   Stack: ${errorStack}`);
+    console.error(`[AOF] Exception dispatching ${action.taskId} (agent: ${action.agent}): ${errorMsg}`);
     
     try {
       await logger.logDispatch("dispatch.error", "scheduler", action.taskId, {
@@ -305,11 +280,10 @@ export async function executeAssignAction(
         errorMessage: errorMsg,
         errorStack: errorStack,
       });
-    } catch (logErr) {
-      console.error(`[AOF] [BUG-003] Failed to log dispatch.error: ${(logErr as Error).message}`);
+    } catch {
+      // Logging errors should not crash the scheduler
     }
     
-    // Log action completion with exception
     try {
       await logger.logAction("action.completed", "scheduler", action.taskId, {
         action: action.type,
@@ -318,8 +292,8 @@ export async function executeAssignAction(
         errorMessage: errorMsg,
         errorStack: errorStack,
       });
-    } catch (logErr) {
-      console.error(`[AOF] [BUG-003] Failed to log action.completed: ${(logErr as Error).message}`);
+    } catch {
+      // Logging errors should not crash the scheduler
     }
     
     // Don't count as executed if exception occurred, mark as failed
