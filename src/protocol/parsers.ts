@@ -8,6 +8,9 @@ import type { EventType } from "../schemas/event.js";
 
 const PROTOCOL_PREFIX = "AOF/1 ";
 
+/** Maximum protocol message size in bytes (10 MB). SEC-003: CWE-400. */
+export const MAX_ENVELOPE_BYTES = 10 * 1024 * 1024;
+
 export interface ProtocolLogger {
   log(
     type: EventType,
@@ -23,6 +26,14 @@ export function parseProtocolMessage(
   event: unknown,
   logger?: ProtocolLogger,
 ): ProtocolEnvelopeType | null {
+  // SEC-003: Reject oversized payloads to prevent resource exhaustion
+  if (typeof event === "string" && Buffer.byteLength(event, "utf8") > MAX_ENVELOPE_BYTES) {
+    void logger?.log("protocol.message.rejected", "system", {
+      payload: { reason: "payload_too_large", maxBytes: MAX_ENVELOPE_BYTES },
+    });
+    return null;
+  }
+
   const candidate = extractPayload(event);
 
   if (candidate && typeof candidate === "object") {
@@ -33,6 +44,13 @@ export function parseProtocolMessage(
   }
 
   if (typeof candidate === "string") {
+    // SEC-003: Reject oversized string payloads
+    if (Buffer.byteLength(candidate, "utf8") > MAX_ENVELOPE_BYTES) {
+      void logger?.log("protocol.message.rejected", "system", {
+        payload: { reason: "payload_too_large", maxBytes: MAX_ENVELOPE_BYTES },
+      });
+      return null;
+    }
     const trimmed = candidate.trim();
 
     if (trimmed.startsWith(PROTOCOL_PREFIX)) {
