@@ -306,4 +306,33 @@ describe("protocol schemas", () => {
       });
     });
   });
+
+  describe("TestReport cross-field validation", () => {
+    it("accepts valid test counts where passed + failed <= total", () => {
+      const result = CompletionReportPayload.safeParse({
+        ...completionPayload,
+        tests: { total: 10, passed: 8, failed: 2 },
+      });
+      expect(result.success).toBe(true);
+    });
+
+    it("accepts test counts where passed + failed < total (some skipped)", () => {
+      const result = CompletionReportPayload.safeParse({
+        ...completionPayload,
+        tests: { total: 10, passed: 7, failed: 2 },
+      });
+      expect(result.success).toBe(true);
+    });
+
+    it("rejects test counts where passed + failed > total", () => {
+      const result = CompletionReportPayload.safeParse({
+        ...completionPayload,
+        tests: { total: 10, passed: 8, failed: 5 },
+      });
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(result.error.issues[0].message).toContain("passed + failed must not exceed total");
+      }
+    });
+  });
 });

@@ -31,11 +31,15 @@ export const CompletionOutcome = z.enum([
 ]);
 export type CompletionOutcome = z.infer<typeof CompletionOutcome>;
 
-export const TestReport = z.object({
-  total: z.number().int().nonnegative(),
-  passed: z.number().int().nonnegative(),
-  failed: z.number().int().nonnegative(),
-});
+export const TestReport = z
+  .object({
+    total: z.number().int().nonnegative(),
+    passed: z.number().int().nonnegative(),
+    failed: z.number().int().nonnegative(),
+  })
+  .refine((d) => d.passed + d.failed <= d.total, {
+    message: "passed + failed must not exceed total",
+  });
 export type TestReport = z.infer<typeof TestReport>;
 
 export const CompletionReportPayload = z.object({

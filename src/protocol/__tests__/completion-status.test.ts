@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { mkdtemp, rm, mkdir } from "node:fs/promises";
+import { mkdtemp, rm, mkdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { FilesystemTaskStore } from "../../store/task-store.js";
@@ -374,5 +374,59 @@ describe("ProtocolRouter completion/status handlers", () => {
     );
     expect(rejectedEvent).toBeDefined();
     expect(rejectedEvent?.payload?.sender).toBe("swe-backend");
+  });
+
+  it("logs warning when summaryRef file does not exist", async () => {
+    const task = await createInProgressTask();
+    const envelope = makeCompletionEnvelope(task.frontmatter.id, "done", {
+      payload: {
+        outcome: "done",
+        summaryRef: "outputs/nonexistent-summary.md",
+        deliverables: [],
+        tests: { total: 1, passed: 1, failed: 0 },
+        blockers: [],
+        notes: "Test",
+      },
+    });
+
+    await router.handleCompletionReport(envelope, store);
+
+    // Completion still proceeds despite missing file
+    const updated = await store.get(task.frontmatter.id);
+    expect(updated?.frontmatter.status).toBe("review");
+
+    // Warning logged
+    const warningEvent = loggedEvents.find(
+      (e) => e.type === "protocol.message.warning" && e.payload?.reason === "summary_file_not_found",
+    );
+    expect(warningEvent).toBeDefined();
+    expect(warningEvent?.payload?.summaryRef).toBe("outputs/nonexistent-summary.md");
+  });
+
+  it("does not log warning when summaryRef file exists", async () => {
+    const task = await createInProgressTask();
+
+    // Create the summary file
+    const summaryPath = join(tmpDir, "summary.md");
+    await writeFile(summaryPath, "# Summary\nDone.");
+
+    const envelope = makeCompletionEnvelope(task.frontmatter.id, "done", {
+      payload: {
+        outcome: "done",
+        summaryRef: summaryPath,
+        deliverables: [],
+        tests: { total: 1, passed: 1, failed: 0 },
+        blockers: [],
+        notes: "Test",
+      },
+    });
+
+    await router.handleCompletionReport(envelope, store);
+
+    // No warning logged
+    const warningEvent = loggedEvents.find(
+      (e) => e.type === "protocol.message.warning" && e.payload?.reason === "summary_file_not_found",
+    );
+    expect(warningEvent).toBeUndefined();
   });
 });
