@@ -13,6 +13,7 @@ import { checkStaleHeartbeats, markRunArtifactExpired, readRunResult } from "../
 import { resolveCompletionTransitions } from "../protocol/completion-utils.js";
 import { SLAChecker } from "./sla-checker.js";
 import { join, relative } from "node:path";
+import { readFileSync } from "node:fs";
 import { readFile, access } from "node:fs/promises";
 import { parse as parseYaml } from "yaml";
 import writeFileAtomic from "write-file-atomic";
@@ -198,7 +199,16 @@ export async function poll(
 
   // 3.8. Check for SLA violations (AOF-ae6: SLA scheduler integration)
   const slaChecker = config.slaChecker ?? new SLAChecker();
-  const projectManifest = {}; // TODO: Load from project.yaml when available
+  let projectManifest: Record<string, unknown> = {};
+  const projectYamlPath = join(config.dataDir, "project.yaml");
+  try {
+    const projectYamlContent = readFileSync(projectYamlPath, "utf8");
+    projectManifest = parseYaml(projectYamlContent) ?? {};
+  } catch (err: unknown) {
+    if ((err as NodeJS.ErrnoException).code !== "ENOENT") {
+      console.warn(`[AOF] Failed to parse project.yaml at ${projectYamlPath}: ${(err as Error).message}`);
+    }
+  }
   const slaViolations = slaChecker.checkViolations(allTasks, projectManifest);
   
   for (const violation of slaViolations) {
