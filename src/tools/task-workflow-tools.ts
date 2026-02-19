@@ -37,44 +37,44 @@ async function validateGateCompletion(
 
   if (!input.outcome) {
     throw new Error(
-      `Task ${task.frontmatter.id} is in gate workflow "${task.frontmatter.gate.workflowId}".\n\n` +
+      `Task ${task.frontmatter.id} is in a gate workflow (current gate: "${task.frontmatter.gate.current}").\n\n` +
       `Gate tasks REQUIRE an 'outcome' parameter. Use:\n` +
       `  aofTaskComplete({\n` +
       `    taskId: "${task.frontmatter.id}",\n` +
-      `    outcome: "approved" | "needs_review" | "rejected",\n` +
+      `    outcome: "complete" | "needs_review" | "blocked",\n` +
       `    summary: "..."\n` +
       `  })\n\n` +
-      `Workflow: ${task.frontmatter.gate.workflowId} | Current: ${task.frontmatter.gate.currentGate}`
+      `Current gate: ${task.frontmatter.gate.current}`
     );
   }
 
-  const validOutcomes = ["approved", "needs_review", "rejected"] as const;
+  const validOutcomes: string[] = ["complete", "needs_review", "blocked"];
   if (!validOutcomes.includes(input.outcome)) {
     throw new Error(
       `Invalid outcome: "${input.outcome}".\n\n` +
       `Valid outcomes for gate workflows:\n` +
-      `- "approved": Mark complete and advance to next gate\n` +
-      `- "needs_review": Request review from another agent/team\n` +
-      `- "rejected": Block progression (requires rejection notes)\n\n` +
+      `- "complete": Mark work done and advance to next gate\n` +
+      `- "needs_review": Request changes (requires rejectionNotes)\n` +
+      `- "blocked": Cannot proceed due to external dependency (requires blockers)\n\n` +
       `Use:\n` +
       `  aofTaskComplete({\n` +
       `    taskId: "${task.frontmatter.id}",\n` +
-      `    outcome: "approved",\n` +
+      `    outcome: "complete",\n` +
       `    summary: "..."\n` +
       `  })`
     );
   }
 
-  // rejection → requires rejectionNotes
-  if (input.outcome === "rejected" && !input.rejectionNotes) {
+  // blocked → requires blockers
+  if (input.outcome === "blocked" && (!input.blockers || input.blockers.length === 0)) {
     throw new Error(
-      `Outcome "rejected" requires 'rejectionNotes'.\n\n` +
-      `When rejecting a task, explain WHY so the team can fix it.\n\n` +
+      `Outcome "blocked" requires 'blockers'.\n\n` +
+      `When blocking a task, list what's preventing progress.\n\n` +
       `Use:\n` +
       `  aofTaskComplete({\n` +
       `    taskId: "${task.frontmatter.id}",\n` +
-      `    outcome: "rejected",\n` +
-      `    rejectionNotes: "Missing error handling in auth flow",\n` +
+      `    outcome: "blocked",\n` +
+      `    blockers: ["Waiting for API key from platform team"],\n` +
       `    summary: "..."\n` +
       `  })`
     );
@@ -83,14 +83,14 @@ async function validateGateCompletion(
   // needs_review → requires blockers
   if (input.outcome === "needs_review" && (!input.blockers || input.blockers.length === 0)) {
     throw new Error(
-      `Outcome "needs_review" requires 'blockers' (task IDs to review).\n\n` +
-      `Specify which tasks need review before this can proceed.\n\n` +
+      `Outcome "needs_review" requires 'blockers' (specific issues to fix).\n\n` +
+      `Specify what needs to be fixed before this can proceed.\n\n` +
       `Use:\n` +
       `  aofTaskComplete({\n` +
       `    taskId: "${task.frontmatter.id}",\n` +
       `    outcome: "needs_review",\n` +
-      `    blockers: ["TASK-2026-02-15-001"],\n` +
-      `    summary: "Waiting on security review"\n` +
+      `    blockers: ["Missing error handling in auth flow"],\n` +
+      `    summary: "Waiting on fixes"\n` +
       `  })`
     );
   }
@@ -287,7 +287,7 @@ export async function aofTaskDepAdd(
 
   const updatedTask = await ctx.store.addDep(task.frontmatter.id, blocker.frontmatter.id);
 
-  await ctx.logger.log("task.dependency.added", actor, {
+  await ctx.logger.log("task.dep.added", actor, {
     taskId: updatedTask.frontmatter.id,
     payload: { blockerId: blocker.frontmatter.id },
   });
@@ -318,7 +318,7 @@ export async function aofTaskDepRemove(
 
   const updatedTask = await ctx.store.removeDep(task.frontmatter.id, blocker.frontmatter.id);
 
-  await ctx.logger.log("task.dependency.removed", actor, {
+  await ctx.logger.log("task.dep.removed", actor, {
     taskId: updatedTask.frontmatter.id,
     payload: { blockerId: blocker.frontmatter.id },
   });

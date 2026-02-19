@@ -14,6 +14,9 @@ export interface ToolResponseEnvelope {
     taskId?: string;
     status?: string;
     charCount?: number;
+    blockerId?: string;
+    updatedFields?: string[];
+    [key: string]: unknown;
   };
 }
 

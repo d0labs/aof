@@ -36,6 +36,7 @@ export async function aofStatusReport(
     blocked: 0,
     review: 0,
     done: 0,
+    cancelled: 0,
     deadletter: 0,
   };
 
