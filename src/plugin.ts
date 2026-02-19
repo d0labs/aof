@@ -2,6 +2,7 @@ import { join } from "node:path";
 import { homedir } from "node:os";
 import { registerAofPlugin } from "./openclaw/adapter.js";
 import type { OpenClawApi } from "./openclaw/types.js";
+import { registerMemoryModule } from "./memory/index.js";
 
 type AofPluginConfig = {
   dataDir?: string;
@@ -76,21 +77,14 @@ const plugin = {
         gatewayToken,
       });
 
-      if (typeof api.log === "function") {
-        api.log("info", `[AOF] Plugin loaded — dataDir=${dataDir}, dryRun=${dryRun}, poll=${pollIntervalMs}ms`);
-      } else {
-        api.logger?.info?.(`[AOF] Plugin loaded — dataDir=${dataDir}, dryRun=${dryRun}, poll=${pollIntervalMs}ms`);
-      }
+      registerMemoryModule(api);
+
+      api.logger?.info?.(`[AOF] Plugin loaded — dataDir=${dataDir}, dryRun=${dryRun}, poll=${pollIntervalMs}ms`);
     } catch (err) {
       const message = `[AOF] Plugin registration failed: ${String(err)}`;
-      if (typeof api.log === "function") {
-        api.log("error", message);
-      } else {
-        api.logger?.error?.(message);
-      }
-      throw err;
+      api.logger?.error?.(message);
     }
   },
-};
+};;
 
 export default plugin;
