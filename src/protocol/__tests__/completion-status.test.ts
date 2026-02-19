@@ -5,7 +5,8 @@ import { join } from "node:path";
 import { FilesystemTaskStore } from "../../store/task-store.js";
 import type { ITaskStore } from "../../store/interfaces.js";
 import { EventLogger } from "../../events/logger.js";
-import { MockNotificationAdapter, NotificationService } from "../../events/notifier.js";
+import { MockNotificationAdapter } from "../../events/notifier.js";
+import { NotificationPolicyEngine, DEFAULT_RULES } from "../../events/notification-policy/index.js";
 import { ProtocolRouter } from "../router.js";
 import { readRunResult, writeRunResult } from "../../recovery/run-artifacts.js";
 import type { ProtocolEnvelope } from "../../schemas/protocol.js";
@@ -52,7 +53,6 @@ describe("ProtocolRouter completion/status handlers", () => {
   let store: ITaskStore;
   let logger: EventLogger;
   let adapter: MockNotificationAdapter;
-  let notifier: NotificationService;
   let router: ProtocolRouter;
   let loggedEvents: Array<{ type: string; actor: string; taskId?: string; payload?: Record<string, unknown> }>;
 
@@ -76,21 +76,23 @@ describe("ProtocolRouter completion/status handlers", () => {
     const eventsDir = join(tmpDir, "events");
     await mkdir(eventsDir, { recursive: true });
     
+    adapter = new MockNotificationAdapter();
+    const engine = new NotificationPolicyEngine(adapter, DEFAULT_RULES);
+
     loggedEvents = [];
     logger = new EventLogger(eventsDir, {
-      onEvent: (event) => {
+      onEvent: async (event) => {
         loggedEvents.push({
           type: event.type,
           actor: event.actor,
           taskId: event.taskId,
           payload: event.payload,
         });
+        await engine.handleEvent(event);
       },
     });
 
-    adapter = new MockNotificationAdapter();
-    notifier = new NotificationService(adapter, { enabled: true });
-    router = new ProtocolRouter({ store, logger, notifier });
+    router = new ProtocolRouter({ store, logger });
   });
 
   afterEach(async () => {

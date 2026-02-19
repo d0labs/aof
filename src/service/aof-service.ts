@@ -5,6 +5,7 @@ import { EventLogger } from "../events/logger.js";
 import { poll, type PollResult, type SchedulerConfig } from "../dispatch/scheduler.js";
 import type { AOFMetrics } from "../metrics/exporter.js";
 import type { NotificationService } from "../events/notifier.js";
+import type { NotificationPolicyEngine } from "../events/notification-policy/index.js";
 import { parseProtocolMessage, ProtocolRouter } from "../protocol/router.js";
 import { discoverProjects, type ProjectRecord } from "../projects/index.js";
 import { createMurmurHook } from "../dispatch/murmur-hooks.js";
@@ -24,7 +25,10 @@ export interface AOFServiceDependencies {
   store?: ITaskStore;
   logger?: EventLogger;
   metrics?: AOFMetrics;
+  /** @deprecated Pass `engine` instead. Will be removed in a future release. */
   notifier?: NotificationService;
+  /** Notification policy engine — wired to EventLogger.onEvent automatically. */
+  engine?: NotificationPolicyEngine;
   poller?: typeof poll;
   executor?: import("../dispatch/executor.js").DispatchExecutor;
   protocolRouter?: ProtocolRouter;
@@ -44,6 +48,7 @@ export class AOFService {
   private readonly logger: EventLogger;
   private readonly metrics?: AOFMetrics;
   private readonly notifier?: NotificationService;
+  private readonly engine?: NotificationPolicyEngine;
   private readonly poller: typeof poll;
   private readonly schedulerConfig: SchedulerConfig;
   private readonly pollIntervalMs: number;
@@ -65,12 +70,17 @@ export class AOFService {
   constructor(deps: AOFServiceDependencies, config: AOFServiceConfig) {
     this.vaultRoot = config.vaultRoot;
     
-    const storeWithHooks = deps.store ?? new FilesystemTaskStore(config.dataDir, {
-      hooks: this.createStoreHooks(deps.notifier, config.dataDir),
+    // Wire engine to EventLogger so ALL logged events route through it automatically
+    this.engine = deps.engine;
+    this.logger = deps.logger ?? new EventLogger(join(config.dataDir, "events"), {
+      onEvent: deps.engine ? (e) => deps.engine!.handleEvent(e) : undefined,
     });
-    
+
+    const storeWithHooks = deps.store ?? new FilesystemTaskStore(config.dataDir, {
+      hooks: this.createStoreHooks(config.dataDir),
+    });
+
     this.store = storeWithHooks;
-    this.logger = deps.logger ?? new EventLogger(join(config.dataDir, "events"));
     this.metrics = deps.metrics;
     this.notifier = deps.notifier;
     this.poller = deps.poller ?? poll;
@@ -109,16 +119,8 @@ export class AOFService {
     
     this.running = true;
 
-    // Send startup notification
-    if (this.notifier) {
-      await this.notifier.notify({
-        eventId: Date.now(),
-        type: "system.startup",
-        timestamp: new Date().toISOString(),
-        actor: "system",
-        payload: {},
-      });
-    }
+    // Log startup — engine picks it up via EventLogger.onEvent callback
+    await this.logger.logSystem("system.startup");
 
     await this.triggerPoll("startup");
 
@@ -189,7 +191,7 @@ export class AOFService {
 
       const store = new FilesystemTaskStore(project.path, {
         projectId: project.id,
-        hooks: this.createStoreHooks(this.notifier, project.path),
+        hooks: this.createStoreHooks(project.path),
         logger: this.logger,
       });
       
@@ -275,34 +277,27 @@ export class AOFService {
   }
 
   private createStoreHooks(
-    notifier?: NotificationService,
     projectRoot?: string
   ): import("../store/task-store.js").TaskStoreHooks {
     // Create murmur hook for orchestration review tracking
     const murmurHook = projectRoot ? createMurmurHook(projectRoot) : undefined;
-    
+
     return {
       afterTransition: async (task, previousStatus) => {
         // Murmur state tracking (completions, failures, review end)
         if (murmurHook) {
           await murmurHook(task, previousStatus);
         }
-        
-        // Notification service hook
-        if (!notifier) return;
-        
-        await notifier.notify({
-          eventId: Date.now(),
-          type: "task.transitioned",
-          timestamp: new Date().toISOString(),
-          actor: task.frontmatter.lease?.agent ?? "system",
-          taskId: task.frontmatter.id,
-          payload: {
-            from: previousStatus,
-            to: task.frontmatter.status,
-            title: task.frontmatter.title,
-          },
-        });
+
+        // Route task.transitioned event through the engine via EventLogger.
+        // Engine deduplication suppresses duplicate sends for router-driven
+        // transitions that also call logTransition() explicitly.
+        await this.logger.logTransition(
+          task.frontmatter.id,
+          previousStatus,
+          task.frontmatter.status,
+          task.frontmatter.lease?.agent ?? "system",
+        );
       },
     };
   }

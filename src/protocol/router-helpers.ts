@@ -82,14 +82,7 @@ export async function applyCompletionOutcome(
         buildCompletionReason(opts),
         logger,
       );
-      await notifyTransition(
-        current.frontmatter.id,
-        previousStatus,
-        current.frontmatter.status,
-        opts.actor,
-        buildCompletionReason(opts),
-        notifier,
-      );
+      // notifyTransition() removed — engine handles notifications via EventLogger.onEvent
     }
   }
 }

@@ -4,7 +4,8 @@ import type { ITaskStore } from "../store/interfaces.js";
 import { EventLogger } from "../events/logger.js";
 import { AOFMetrics } from "../metrics/exporter.js";
 import { AOFService } from "../service/aof-service.js";
-import { NotificationService } from "../events/notifier.js";
+import { NotificationPolicyEngine, DEFAULT_RULES } from "../events/notification-policy/index.js";
+import { ConsoleNotifier } from "../adapters/console-notifier.js";
 import { MatrixNotifier } from "./matrix-notifier.js";
 import { OpenClawExecutor } from "./openclaw-executor.js";
 import { 
@@ -84,12 +85,11 @@ export function registerAofPlugin(api: OpenClawApi, opts: AOFPluginOptions): AOF
     return new PermissionAwareTaskStore(store, orgChart, actor);
   };
 
-  // Wire up notification service if message tool provided
-  let notifier: NotificationService | undefined;
-  if (opts.messageTool) {
-    const adapter = new MatrixNotifier(opts.messageTool);
-    notifier = new NotificationService(adapter, { enabled: true });
-  }
+  // Build notification adapter: MatrixNotifier (plugin mode) or ConsoleNotifier (standalone)
+  const notifAdapter = opts.messageTool
+    ? new MatrixNotifier(opts.messageTool)
+    : new ConsoleNotifier();
+  const engine = new NotificationPolicyEngine(notifAdapter, DEFAULT_RULES);
 
   // Create executor for agent dispatch (only when explicitly not in dry-run mode)
   const executor = opts.dryRun === false 
@@ -101,7 +101,7 @@ export function registerAofPlugin(api: OpenClawApi, opts: AOFPluginOptions): AOF
 
   const service = opts.service
     ?? new AOFService(
-      { store, logger, metrics, notifier, executor },
+      { store, logger, metrics, engine, executor },
       {
         dataDir: opts.dataDir,
         dryRun: opts.dryRun ?? true,
