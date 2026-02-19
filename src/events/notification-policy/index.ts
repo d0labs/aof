@@ -18,3 +18,9 @@ export { DeduplicationStore } from "./deduper.js";
 export type { DedupeOptions } from "./deduper.js";
 
 export { SeverityResolver, ALWAYS_CRITICAL_EVENTS } from "./severity.js";
+
+export { StormBatcher } from "./batcher.js";
+export type { StormBatcherOptions, QueuedNotification } from "./batcher.js";
+
+export { AudienceRouter } from "./audience.js";
+export type { AudienceChannelMap } from "./audience.js";

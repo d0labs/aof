@@ -19,12 +19,15 @@ import {
 } from "./rules.js";
 import { DeduplicationStore } from "./deduper.js";
 import { SeverityResolver } from "./severity.js";
+import type { StormBatcher } from "./batcher.js";
 
 export interface EngineOptions {
   /** Global dedupe window in ms. Default: 300_000 (5 minutes). */
   dedupeWindowMs?: number;
   /** Set false to disable all notifications (e.g. test environments). */
   enabled?: boolean;
+  /** Optional storm batcher for high-volume event types. */
+  batcher?: StormBatcher;
 }
 
 export interface EngineStats {
@@ -93,6 +96,7 @@ export class NotificationPolicyEngine {
   private readonly deduper: DeduplicationStore;
   private readonly severity: SeverityResolver;
   private readonly enabled: boolean;
+  private readonly batcher?: StormBatcher;
   private readonly stats: EngineStats = {
     sent: 0,
     suppressed: 0,
@@ -110,6 +114,7 @@ export class NotificationPolicyEngine {
     this.deduper = new DeduplicationStore({ windowMs: opts.dedupeWindowMs });
     this.severity = new SeverityResolver();
     this.enabled = opts.enabled ?? true;
+    this.batcher = opts.batcher;
   }
 
   /**

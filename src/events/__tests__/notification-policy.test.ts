@@ -559,3 +559,86 @@ describe("DEFAULT_RULES", () => {
     }
   });
 });
+
+// ── StormBatcher tests ──────────────────────────────────────────────────────
+
+describe("StormBatcher", () => {
+  it("sends critical events immediately without batching", async () => {
+    const sent: Array<{ channel: string; message: string }> = [];
+    const adapter = { send: async (ch: string, msg: string) => { sent.push({ channel: ch, message: msg }); } };
+    const { StormBatcher } = await import("../notification-policy/batcher.js");
+    const batcher = new StormBatcher(adapter, { windowMs: 60_000, threshold: 5 });
+
+    await batcher.enqueue({ eventType: "task.abandoned", channel: "#critical", message: "abandoned!", critical: true });
+    expect(sent).toHaveLength(1);
+    expect(sent[0].message).toBe("abandoned!");
+    await batcher.stop();
+  });
+
+  it("batches events above threshold into a digest", async () => {
+    const sent: Array<{ channel: string; message: string }> = [];
+    const adapter = { send: async (ch: string, msg: string) => { sent.push({ channel: ch, message: msg }); } };
+    const { StormBatcher } = await import("../notification-policy/batcher.js");
+    const batcher = new StormBatcher(adapter, { windowMs: 60_000, threshold: 3 });
+
+    for (let i = 0; i < 6; i++) {
+      await batcher.enqueue({ eventType: "task.transitioned", channel: "#dispatch", message: `task-${i} moved` });
+    }
+    expect(sent).toHaveLength(0); // not yet flushed
+
+    await batcher.flush();
+    expect(sent).toHaveLength(1);
+    expect(sent[0].message).toContain("storm");
+    expect(sent[0].message).toContain("6");
+    await batcher.stop();
+  });
+
+  it("sends individually when below threshold", async () => {
+    const sent: Array<{ channel: string; message: string }> = [];
+    const adapter = { send: async (ch: string, msg: string) => { sent.push({ channel: ch, message: msg }); } };
+    const { StormBatcher } = await import("../notification-policy/batcher.js");
+    const batcher = new StormBatcher(adapter, { windowMs: 60_000, threshold: 5 });
+
+    await batcher.enqueue({ eventType: "task.created", channel: "#dispatch", message: "created 1" });
+    await batcher.enqueue({ eventType: "task.created", channel: "#dispatch", message: "created 2" });
+    await batcher.flush();
+    expect(sent).toHaveLength(2);
+    await batcher.stop();
+  });
+
+  it("flushes remaining on stop", async () => {
+    const sent: Array<{ channel: string; message: string }> = [];
+    const adapter = { send: async (ch: string, msg: string) => { sent.push({ channel: ch, message: msg }); } };
+    const { StormBatcher } = await import("../notification-policy/batcher.js");
+    const batcher = new StormBatcher(adapter, { windowMs: 60_000, threshold: 5 });
+
+    await batcher.enqueue({ eventType: "test.event", channel: "#ch", message: "msg1" });
+    await batcher.stop();
+    expect(sent).toHaveLength(1);
+  });
+});
+
+// ── AudienceRouter tests ────────────────────────────────────────────────────
+
+describe("AudienceRouter", () => {
+  it("resolves audience targets to channels", async () => {
+    const { AudienceRouter } = await import("../notification-policy/audience.js");
+    const router = new AudienceRouter({ agent: "#agents", "team-lead": "#leads", operator: "#ops" });
+    const channels = router.resolve(["agent", "operator"]);
+    expect(channels).toEqual(["#agents", "#ops"]);
+  });
+
+  it("deduplicates channels", async () => {
+    const { AudienceRouter } = await import("../notification-policy/audience.js");
+    const router = new AudienceRouter({ agent: "#same", "team-lead": "#same", operator: "#ops" });
+    const channels = router.resolve(["agent", "team-lead", "operator"]);
+    expect(channels).toEqual(["#same", "#ops"]);
+  });
+
+  it("applies overrides", async () => {
+    const { AudienceRouter } = await import("../notification-policy/audience.js");
+    const router = new AudienceRouter({ agent: "#agents", "team-lead": "#leads", operator: "#ops" });
+    const channels = router.resolve(["agent"], { agent: "#custom" });
+    expect(channels).toEqual(["#custom"]);
+  });
+});
