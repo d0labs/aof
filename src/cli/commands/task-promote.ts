@@ -11,7 +11,6 @@ import { checkPromotionEligibility } from "../../dispatch/promotion.js";
 
 export interface TaskPromoteOptions {
   force?: boolean;
-  return { eligible: true };
 }
 
 /**

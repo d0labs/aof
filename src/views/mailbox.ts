@@ -163,7 +163,7 @@ export async function syncMailboxView(
 }
 
 export function createMailboxHooks(
-  getStore: () => TaskStore,
+  getStore: () => ITaskStore,
   options: MailboxViewOptions,
 ): TaskStoreHooks {
   return {
