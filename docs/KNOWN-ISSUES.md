@@ -78,12 +78,11 @@ agents:
 
 ---
 
-## XRAY-006: Task retry count persists across manual recovery (Category A)
+## XRAY-006: Task retry count persists across manual recovery (Category A — RESOLVED)
 **Date**: 2026-02-16
 **Symptoms**: After manually moving task from `blocked` to `ready`, `metadata.retryCount` still reflects previous failures.
 **Root cause**: Manual file move doesn't reset metadata fields.
-**Fix**: Manually reset `retryCount: 0` when recovering tasks.
-**Prevention**: AOF should provide a CLI command or tool for task recovery that handles metadata cleanup. **TODO**: Add `aof task recover <id>` command.
+**Status**: RESOLVED (2026-02-19) — `unblockTask()` and `resetDispatchFailures()` now clear `retryCount`. Use `aof task unblock <id>` instead of manual file moves.
 
 ---
 
