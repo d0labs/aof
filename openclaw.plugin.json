@@ -23,15 +23,15 @@
       },
       "dryRun": {
         "type": "boolean",
-        "description": "If true, scheduler observes but doesn't dispatch (default: true)"
+        "description": "If true, scheduler observes but doesn't dispatch (default: false)"
       },
       "gatewayUrl": {
         "type": "string",
-        "description": "OpenClaw gateway URL for HTTP dispatch (e.g. http://127.0.0.1:18789)"
+        "description": "OpenClaw gateway URL for HTTP dispatch. Auto-detected from runtime context (api.config.gateway.port) if omitted. Only set this if auto-detection fails."
       },
       "gatewayToken": {
         "type": "string",
-        "description": "OpenClaw gateway authentication token"
+        "description": "OpenClaw gateway authentication token. Auto-detected from runtime context (api.config.gateway.auth.token) or OPENCLAW_GATEWAY_TOKEN env var if omitted."
       },
       "heartbeatTtlMs": {
         "type": "number",

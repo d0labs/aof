@@ -23,7 +23,8 @@ export class OpenClawExecutor implements DispatchExecutor {
     
     this.gatewayToken = opts.gatewayToken
       || process.env.OPENCLAW_GATEWAY_TOKEN
-      || this.api.config?.gateway?.auth?.token;
+      || this.api.config?.gateway?.auth?.token
+      || this.api.config?.gateway?.token;
   }
 
   async spawn(context: TaskContext, opts?: { timeoutMs?: number }): Promise<ExecutorResult> {
@@ -307,6 +308,11 @@ Read the task file for full details and acceptance criteria.
   }
 
   private deriveGatewayUrl(): string | undefined {
+    // Prefer explicit URL from gateway config
+    const explicitUrl = this.api.config?.gateway?.url;
+    if (explicitUrl) return explicitUrl;
+
+    // Fall back to constructing URL from port
     const port = this.api.config?.gateway?.port;
     if (port) {
       return `http://127.0.0.1:${port}`;
