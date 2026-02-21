@@ -1,3 +1,5 @@
+> **Internal document** — context-specific details may not apply to general deployments.
+
 # AOF → OpenClaw Production Integration Plan
 
 **Scope:** Deploy AOF as an OpenClaw plugin in the existing production instance. This is a plan/runbook only. No implementation changes beyond deployment steps.
@@ -5,11 +7,11 @@
 **IMPORTANT:** Before executing this plan, all items in `docs/DEFINITION-OF-DONE.md` must be satisfied. See `docs/PLUGIN-INTEGRATION-STATUS.md` for current status. 
 
 **Environment Summary**
-- OpenClaw 2026.2.6 on Demerzel VM (macOS arm64; Tailscale `demerzel` / `100.73.195.63`)
+- OpenClaw 2026.2.6 on target host (macOS arm64)
 - 18 agents (main + suite)
 - Config managed via `gateway(action="config.patch")` only (never edit on disk)
 - Plugin load via `plugins.entries[]` in `openclaw.json`
-- Observability: Prometheus :9100, Loki shipper, Grafana on Mule
+- Observability: Prometheus :9100, Loki shipper, Grafana
 - Existing plugins: `serena-lsp`, `metrics-bridge`
 
 **AOF**
@@ -164,7 +166,7 @@
 **Steps**
 1. Metrics:
    - Confirm AOF exposes Prometheus metrics on existing exporter path/labels.
-   - Add/adjust Grafana dashboard panels (if needed) on Mule.
+   - Add/adjust Grafana dashboard panels as needed.
 2. Logs:
    - Ensure plugin logs are tagged for Loki ingestion.
 3. Alerts:

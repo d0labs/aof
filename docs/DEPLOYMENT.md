@@ -115,9 +115,9 @@ curl http://127.0.0.1:18000/health
 
 ---
 
-## Deployment Steps (Docker / Mule-like Environments)
+## Deployment Steps (Docker / OpenClaw Environments)
 
-### 1) Install AOF plugin (Mule/OpenClaw)
+### 1) Install AOF plugin (OpenClaw)
 
 1. Copy AOF to OpenClaw extensions:
    ```bash
@@ -157,7 +157,7 @@ If running outside OpenClaw, use the daemon CLI (located in `dist/cli/`).
 node dist/cli/index.js daemon start --root /data/aof --port 18000
 ```
 
-> Note: The daemon CLI is **not installed on Mule** by default. It must be invoked from the AOF distribution.
+> Note: The daemon CLI must be invoked directly from the AOF distribution (e.g., `node dist/cli/index.js daemon start`).
 
 Use Docker or systemd to supervise. Ensure **only one daemon** runs per project.
 

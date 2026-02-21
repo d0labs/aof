@@ -58,7 +58,7 @@ AOF currently has 279 passing unit/integration tests, all with mocked OpenClaw d
 ### 2.1 Recommended Approach: Profile-Based
 
 **Rationale:**
-- ✅ **No Docker dependency** — avoids Colima QEMU panics on Mule
+- ✅ **No Docker dependency** — avoids Colima QEMU panics in containerized environments
 - ✅ **Fast startup** — OpenClaw gateway starts in <2s
 - ✅ **Easy debugging** — logs, state, and artifacts are directly accessible
 - ✅ **CI-compatible** — runs in GitHub Actions without Docker setup
@@ -188,7 +188,7 @@ This creates an isolated OpenClaw instance:
   "plugins": [
     {
       "name": "aof",
-      "path": "/Users/xavier/Projects/AOF/dist/index.js",
+      "path": "/path/to/aof/dist/index.js",
       "options": {
         "dataDir": "~/.openclaw-aof-e2e-test/aof-test-data",
         "dryRun": false,

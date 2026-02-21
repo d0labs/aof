@@ -1,3 +1,5 @@
+> **Internal document** — context-specific details may not apply to general deployments.
+
 # Agentic SDLC: PM Addendum — Flow, Operations, and Anti-Stall
 
 **Version:** 1.0  
@@ -1030,7 +1032,7 @@ gates:
 - PM drafts quarterly report
 - PO reviews strategic recommendations (align with product goals?)
 - Architect reviews technical recommendations (feasible?)
-- Demerzel approves process changes
+- Lead architect approves process changes
 - PM implements approved changes in Q2
 
 **Tracking improvement:**
@@ -1112,7 +1114,7 @@ Options:
   A. PO de-prioritizes existing P1 work (makes room)
   B. PM recruits additional agent (increases capacity)
   C. PO accepts 2-day delay
-  D. Escalate to Demerzel (executive decision)
+  D. Escalate to project lead (executive decision)
 
 Decision: Documented in project log, communicated to team
 ```

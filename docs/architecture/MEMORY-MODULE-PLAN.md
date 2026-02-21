@@ -1,7 +1,7 @@
 # AOF Memory Module — Architecture & Implementation Plan
 
 **Date**: 2026-02-17  
-**Architect**: Demerzel  
+**Architect**: AOF core team
 **Status**: Design approved, tasks created
 
 ---
@@ -345,7 +345,7 @@ Docs:
 ## Next Steps
 
 1. **Start phase 1 foundation tasks** (AOF-j2v, AOF-28g, AOF-7sr, AOF-329, AOF-ce1, AOF-obq) — all ready to start immediately
-2. **Review this plan** with Xav for approval
+2. **Review this plan** with project lead for approval
 3. **Spawn swe-backend** for implementation (or start with AOF-j2v as a quick validation task)
 4. **Iterative review** after each phase completes
 

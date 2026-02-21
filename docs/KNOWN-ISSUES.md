@@ -1,6 +1,6 @@
 # AOF Known Issues & Workarounds
 
-> Referenced by all SWE agents. Update this whenever a Project Xray issue is resolved.
+> Tracks known issues, workarounds, and resolution status. Update when an issue is resolved.
 > See also: `DEPLOYMENT.md` for deployment-specific instructions.
 
 ---

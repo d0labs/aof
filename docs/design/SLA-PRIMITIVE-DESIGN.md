@@ -433,7 +433,7 @@ aof task update AOF-123 --sla-limit 8h
 - Verify alerts are emitted to configured channel (Slack/Discord)
 
 ### Gate 3 Validation
-- Deploy to Mule sandbox
+- Deploy to staging environment
 - Simulate long-running tasks (sleep agent)
 - Verify SLA violations are detected and alerted
 

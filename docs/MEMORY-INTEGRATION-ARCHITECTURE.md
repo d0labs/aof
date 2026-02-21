@@ -1,8 +1,10 @@
+> **Internal document** — context-specific details may not apply to general deployments.
+
 # AOF Memory Integration Architecture
 
 **Date**: 2026-02-12
-**Status**: Design approved (Xav review), pending architect + PO feedback
-**Authors**: Demerzel + Xav (design session)
+**Status**: Design approved
+**Authors**: AOF core team
 **Supersedes**: `MEMORY-ADAPTER-SPEC.md` (standalone LanceDB adapter approach)
 
 ---
@@ -192,4 +194,4 @@ Full reference: `~/.openclaw/workspace/memory/openclaw-memory-mechanics.md`
 
 ---
 
-*This document captures the design session and implementation of 2026-02-12 between Demerzel and Xav. It reflects a significant pivot from the standalone adapter approach to host-integrated governance.*
+*This document captures the 2026-02-12 design session. It reflects a significant pivot from the standalone adapter approach to host-integrated governance.*

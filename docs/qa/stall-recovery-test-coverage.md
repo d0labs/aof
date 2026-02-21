@@ -76,7 +76,7 @@ The following scenarios are **intentionally out of scope** for integration tests
 
 | Scenario | Reason | Alternative |
 |----------|--------|-------------|
-| **Watchdog restart flow** | Environment-specific (requires process control) | Defer to Gate 3 (Mule sandbox) |
+| **Watchdog restart flow** | Environment-specific (requires process control) | Defer to Gate 3 (staging) |
 | **Daemon auto-restart (3x)** | OS-level process management | Unit tests + Gate 3 |
 | **CLI recovery actions** | Already covered in unit tests | `task-close.test.ts` |
 | **Agent crash simulation** | Requires OS-level process control | Gate 3 |
@@ -146,7 +146,7 @@ The existing integration tests provide comprehensive coverage for the stall reco
 
 ### Future Work (Optional)
 If comprehensive end-to-end testing is desired, consider:
-1. **Gate 3 (Mule Sandbox):** Test watchdog restart flow and daemon recovery
+1. **Gate 3 (Staging):** Test watchdog restart flow and daemon recovery
 2. **Extended Integration Test:** Combine deadletter + SLA flows (e.g., task that fails dispatch AND exceeds SLA)
 3. **CLI Recovery Extension:** Add integration test for `--recover-on-failure` flag (currently unit-tested only)
 
@@ -163,7 +163,7 @@ If comprehensive end-to-end testing is desired, consider:
 **Test Suite Status:** ✅ 1337/1340 passing, 0 failures  
 **Gate 1 (Unit Tests):** ✅ PASS  
 **Gate 2 (Integration Tests):** ✅ PASS  
-**Gate 3 (Mule Sandbox):** PENDING (out of scope for AOF-36q)
+**Gate 3 (Staging):** PENDING (out of scope for AOF-36q)
 
 **Conclusion:** Task AOF-36q can be closed. No new integration tests are required.
 

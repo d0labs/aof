@@ -4,7 +4,7 @@
 **Author:** Architect  
 **Date:** 2026-02-16  
 **Status:** Draft — Awaiting PO/PM Review  
-**Context:** Project Xray findings — response to missing enforcement of multi-stage process gates
+**Context:** Operational findings — response to missing enforcement of multi-stage process gates
 
 ---
 
@@ -2254,7 +2254,7 @@ gates:  # Ordered gate list
 
 ## 15. Next Steps
 
-1. **Review this design:** PO, PM, and Demerzel validate abstractions and constraints
+1. **Review this design:** PO, PM, and lead architect validate abstractions and constraints
 2. **Prototype gate evaluator:** Build core algorithm (section 3.1) in isolation, validate with test cases
 3. **Define schema:** Finalize task frontmatter and workflow config (section 2)
 4. **Spike conditional expressions:** Test JavaScript sandbox for `when` clauses, measure performance
