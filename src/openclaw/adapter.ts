@@ -104,7 +104,7 @@ export function registerAofPlugin(api: OpenClawApi, opts: AOFPluginOptions): AOF
       { store, logger, metrics, engine, executor },
       {
         dataDir: opts.dataDir,
-        dryRun: opts.dryRun ?? true,
+        dryRun: opts.dryRun ?? false,
         pollIntervalMs: opts.pollIntervalMs,
         defaultLeaseTtlMs: opts.defaultLeaseTtlMs,
         maxConcurrentDispatches: opts.maxConcurrentDispatches,
