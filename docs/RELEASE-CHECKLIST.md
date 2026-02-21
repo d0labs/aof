@@ -148,7 +148,7 @@ npx aof --version
 - Go to https://github.com/demerzel-ops/aof/releases/new
 - Tag: `v{version}`
 - Title: `AOF v{version}`
-- Body: Copy from CHANGELOG or summarize key changes
+- Body: Summarize key changes (release-it auto-generates from conventional commits)
 
 ---
 
