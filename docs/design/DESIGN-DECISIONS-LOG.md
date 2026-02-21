@@ -1,7 +1,9 @@
+> **Internal document** — context-specific details may not apply to general deployments.
+
 # Workflow Gates + Agentic SDLC: Design Decisions Log
 
 **Date:** 2026-02-16  
-**Participants:** Xav (product owner/stakeholder), Demerzel (coordinator)
+**Participants:** AOF core team
 
 ---
 

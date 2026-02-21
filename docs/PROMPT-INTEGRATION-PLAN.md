@@ -1,3 +1,5 @@
+> **Internal document** — context-specific details may not apply to general deployments.
+
 # AOF → OpenClaw Prompt & Workspace File Changes Plan
 **Scope:** Prompt/MD updates only. Aligns with `docs/INTEGRATION-PLAN.md` phases. Keep additions minimal and preserve coexistence with `sessions_spawn` until full rollout.
 
@@ -58,12 +60,12 @@
 ### Change A: update SWE routing rule
 **Before**:
 ```md
-- If Xav prefixes a message with `ARCH:` ... delegate to `swe-architect`...
+- If the user prefixes a message with `ARCH:` ... delegate to `swe-architect`...
   - If there's no prefix but it's clearly software work ... route to `swe-architect` by default.
 ```
 **After** (Phase C1+):
 ```md
-- If Xav prefixes a message with `ARCH:` ... delegate to `swe-architect`...
+- If the user prefixes a message with `ARCH:` ... delegate to `swe-architect`...
   - If there's no prefix but it's clearly software work ... route to `swe-architect` by default.
   - When AOF tools are enabled: create/dispatch a task via `aof_dispatch` instead of ad‑hoc spawn. Fallback to `sessions_spawn` only if AOF tools aren’t available.
 ```

@@ -1,72 +1,108 @@
 # AOF — Agentic Ops Fabric
 
-Deterministic orchestration layer for multi-agent systems. Turns an agent swarm into a reliable, observable, restart-safe operating system for agent work.
+**Deterministic orchestration for multi-agent systems.** AOF turns an agent swarm into a reliable, observable, restart-safe operating environment — with enforced workflows, cascading dependencies, and structured inter-agent communication.
 
-## Features
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Tests](https://img.shields.io/badge/tests-2195%20passing-brightgreen)](#testing)
 
-- **Filesystem-as-API**: Tasks are Markdown files with YAML frontmatter. State transitions use atomic `rename()`.
-- **Deterministic dispatch**: Scheduler runs without LLM in control plane. Lease-based locking, adaptive concurrency, workflow gates.
-- **Org-chart governance**: Declarative YAML defines teams, agents, routing rules, memory scopes, and curation policies.
-- **Memory medallion pipeline**: Hot/warm/cold tiers with org-chart-driven scoping. AOF manages lifecycle; host platform handles retrieval.
-- **Observability**: Prometheus metrics endpoint, JSONL event log, real-time Kanban and mailbox views.
-- **Recovery-first**: SLA enforcement, deadletter queue, task resurrection, drift detection.
+---
+
+## Why AOF?
+
+Multi-agent systems have a coordination problem. Agents run in parallel, share state, drop work on failure, and have no built-in mechanism to enforce quality gates or process stages.
+
+AOF solves this with a filesystem-first control plane:
+
+- **Tasks are Markdown files** — human-readable, diff-able, tool-agnostic
+- **State transitions are atomic `rename()` calls** — no database, no race conditions
+- **The scheduler runs without LLM involvement** — deterministic, testable, cheap
+- **Workflow gates block dispatch** until conditions are met — agents can't skip reviews
+- **Protocol system** gives agents structured, crash-safe inter-agent communication
+
+---
+
+## Key Features
+
+| Feature | Description |
+|---|---|
+| **Org-chart governance** | Declarative YAML defines agents, teams, routing rules, memory scopes |
+| **SDLC workflow enforcement** | Multi-stage gates (implement → review → QA → approve) with rejection loops |
+| **Deterministic scheduling** | Lease-based locking, adaptive concurrency, SLA enforcement |
+| **Protocol system** | Structured handoff, resume, status-update, and completion messages |
+| **Cascading dependencies** | Task completion/blocking immediately propagates to dependents |
+| **Notification engine** | Channel routing, deduplication, storm batching for busy periods |
+| **HNSW vector search** | Cosine-similarity memory search with incremental inserts and disk persistence |
+| **Recovery-first** | Deadletter queue, task resurrection, lease expiration, drift detection |
+| **Observability** | Prometheus metrics, JSONL event log, real-time Kanban and mailbox views |
+
+---
 
 ## Quick Start
 
-### Installation
+### Prerequisites
+
+- Node.js 20+
+- npm 9+
+
+### Install
 
 ```bash
-git clone https://github.com/xavierspriet/aof.git ~/Projects/AOF
-cd ~/Projects/AOF
+git clone https://github.com/demerzel-ops/aof.git
+cd aof
 npm install
 npm run build
 ```
 
-### Initialize
+### Initialize a project
 
 ```bash
-# Create AOF installation (interactive)
-./dist/cli/index.js init
+# Interactive setup
+node dist/cli/index.js init
 
-# Or use defaults (non-interactive)
-./dist/cli/index.js init --yes --template minimal
+# Non-interactive with defaults
+node dist/cli/index.js init --yes --template minimal
 ```
 
-### Basic Usage
+### Basic usage
 
 ```bash
-# List all tasks
-aof scan
-
-# Run scheduler (dry-run)
-aof scheduler run
-
-# Run scheduler (active)
-aof scheduler run --active
+# Alias for convenience (optional)
+alias aof="node $(pwd)/dist/cli/index.js"
 
 # Create a task
-aof task create "Fix memory leak in dispatcher" --priority high --agent swe-backend
+aof task create "Implement login endpoint" --priority high --agent swe-backend
 
-# Start daemon
-aof daemon start
+# See all tasks
+aof scan
 
-# Check daemon status
-aof daemon status
+# Run one scheduler cycle (dry-run — no state changes)
+aof scheduler run
+
+# Run scheduler (active mode — dispatches work)
+aof scheduler run --active
+
+# Show Kanban board
+aof board
 ```
 
-### OpenClaw Plugin Mode
-
-AOF can run as an OpenClaw plugin:
+### Run as a daemon
 
 ```bash
-# Integrate with OpenClaw
-aof integrate openclaw
+aof daemon start
+aof daemon status
+aof daemon stop
+```
 
-# Restart gateway to load plugin
+### OpenClaw plugin mode
+
+AOF integrates directly with [OpenClaw](https://openclaw.dev) as a plugin:
+
+```bash
+aof integrate openclaw
 openclaw gateway restart
 ```
 
-Plugin config (`~/.openclaw/openclaw.json`):
+Plugin configuration (`~/.openclaw/openclaw.json`):
 
 ```json
 {
@@ -85,31 +121,64 @@ Plugin config (`~/.openclaw/openclaw.json`):
 }
 ```
 
+---
+
 ## Architecture
 
-### Core Modules
+AOF is organized into focused modules:
 
-- **cli**: Command-line interface (Commander.js)
-- **daemon**: Background service with HTTP health endpoint
-- **dispatch**: Scheduler, executor, SLA checker, gate evaluator, failure tracker, deadletter
-- **store**: Filesystem-based task storage (atomic rename for state transitions)
-- **events**: JSONL event logger
-- **memory**: Curation generator, medallion pipeline (hot → warm → cold)
-- **metrics**: Prometheus exporter
-- **org**: Org-chart parser and validator
-- **schemas**: Zod schemas for task, gate, workflow, SLA, deadletter, org-chart
-- **views**: Kanban and mailbox view generators
-- **recovery**: Task resurrection, lease expiration, deadletter handling
+```
+src/
+├── cli/          Command-line interface (Commander.js)
+├── daemon/       Background service with HTTP health endpoint
+├── dispatch/     Scheduler, gate evaluator, SLA checker, lease manager, dep-cascader
+├── store/        Filesystem task store (atomic rename for state transitions)
+├── protocol/     Inter-agent protocol router (handoff, resume, status update, completion)
+├── events/       JSONL event logger + notification engine
+├── memory/       Medallion pipeline (hot → warm → cold) + HNSW vector index
+├── metrics/      Prometheus exporter
+├── org/          Org-chart parser and validator
+├── schemas/      Zod schemas for tasks, gates, workflows, SLA, org-chart
+├── views/        Kanban and mailbox view generators
+└── recovery/     Task resurrection, lease expiration, deadletter handling
+```
 
-### Task Lifecycle
+### Task lifecycle
 
 ```
 backlog → ready → in-progress → review → done
-                      ↓
-                   blocked
-                      ↓
-                  deadletter (resurrectable)
+                       │
+                   blocked ──► deadletter (resurrectable)
 ```
+
+State transitions use atomic filesystem `rename()` — no database, no locks beyond the OS.
+
+### Workflow gates
+
+Gates enforce multi-stage processes:
+
+```
+in-progress [implement gate]
+     ↓  (agent signals completion)
+review     [review gate — routed to reviewer role]
+     ↓  (reviewer approves)   ↘ (reviewer rejects → loops back)
+done
+```
+
+See [docs/WORKFLOW-GATES.md](docs/WORKFLOW-GATES.md) for full reference.
+
+### Protocol system
+
+Agents communicate via typed protocol envelopes — not free-form messages:
+
+- `completion.report` — task done/blocked/needs_review/partial
+- `status.update` — mid-task progress, work log entries
+- `handoff.request` / `handoff.accepted` / `handoff.rejected` — task delegation
+- `resume` — deterministic re-entry after interruption
+
+See [docs/PROTOCOLS-USER-GUIDE.md](docs/PROTOCOLS-USER-GUIDE.md) for examples.
+
+---
 
 ## Task Format
 
@@ -130,8 +199,6 @@ createdAt: 2026-02-17T09:00:00Z
 updatedAt: 2026-02-17T09:00:00Z
 createdBy: swe-architect
 dependsOn: []
-metadata:
-  phase: 1
 ---
 
 # Objective
@@ -143,60 +210,13 @@ Fix memory leak in scheduler poll loop.
 - [ ] Tests pass
 ```
 
-State transitions happen via atomic filesystem operations:
+Full schema reference: [docs/task-format.md](docs/task-format.md)
 
-```
-tasks/ready/TASK-2026-02-17-001.md
-  → tasks/in-progress/TASK-2026-02-17-001.md
-  → tasks/done/TASK-2026-02-17-001.md
-```
-
-## CLI Reference
-
-### Daemon
-
-- `aof daemon start` - Start background daemon
-- `aof daemon stop` - Stop daemon
-- `aof daemon status` - Check daemon status
-- `aof daemon restart` - Restart daemon
-
-### Tasks
-
-- `aof scan` - List all tasks by status
-- `aof task create <title>` - Create new task
-- `aof task resurrect <id>` - Resurrect deadlettered task
-- `aof task promote <id>` - Promote task from backlog to ready
-
-### Scheduler
-
-- `aof scheduler run` - Run one poll cycle (dry-run)
-- `aof scheduler run --active` - Run one poll cycle (mutate state)
-
-### Org Chart
-
-- `aof org validate [path]` - Validate schema
-- `aof org show [path]` - Display org chart
-- `aof org lint [path]` - Check referential integrity
-- `aof org drift [path]` - Detect drift vs. OpenClaw agents
-
-### Memory
-
-- `aof memory generate` - Generate OpenClaw memory config from org chart
-- `aof memory audit` - Audit memory config vs. org chart
-- `aof memory curate` - Generate curation tasks based on adaptive thresholds
-
-### Observability
-
-- `aof board` - Display Kanban board
-- `aof watch <viewType>` - Watch view directory for real-time updates
-- `aof metrics serve` - Start Prometheus metrics server
-- `aof lint` - Lint all task files
+---
 
 ## Configuration
 
-### Org Chart (`org/org-chart.yaml`)
-
-Defines agents, teams, routing rules, and memory pools:
+### Org chart (`org/org-chart.yaml`)
 
 ```yaml
 version: 1
@@ -216,63 +236,133 @@ memoryPools:
       path: memory/warm/agents
 ```
 
-### Workflow Gates
-
-Gates block task dispatch until conditions are met:
+### Workflow gates
 
 ```yaml
 gates:
-  - id: all-tests-pass
+  - id: review
+    role: swe-lead
+    canReject: true
+  - id: qa
+    role: swe-qa
     type: shell
     command: npm test
-  - id: pr-approved
-    type: manual
-    approver: swe-lead
 ```
 
-### SLA Configuration
+### SLA configuration
 
 ```yaml
 slas:
   - priority: critical
-    maxAge: 3600000  # 1 hour
+    maxAge: 3600000   # 1 hour in ms
     action: escalate
 ```
+
+---
+
+## CLI Reference
+
+### Daemon
+| Command | Description |
+|---|---|
+| `aof daemon start` | Start background daemon |
+| `aof daemon stop` | Stop daemon |
+| `aof daemon status` | Check daemon status |
+| `aof daemon restart` | Restart daemon |
+
+### Tasks
+| Command | Description |
+|---|---|
+| `aof scan` | List all tasks by status |
+| `aof task create <title>` | Create a new task |
+| `aof task resurrect <id>` | Resurrect a deadlettered task |
+| `aof task promote <id>` | Promote task from backlog to ready |
+
+### Scheduler
+| Command | Description |
+|---|---|
+| `aof scheduler run` | One poll cycle (dry-run) |
+| `aof scheduler run --active` | One poll cycle (mutate state) |
+
+### Org chart
+| Command | Description |
+|---|---|
+| `aof org validate [path]` | Validate schema |
+| `aof org show [path]` | Display org chart |
+| `aof org lint [path]` | Check referential integrity |
+| `aof org drift [path]` | Detect drift vs. active agents |
+
+### Memory
+| Command | Description |
+|---|---|
+| `aof memory generate` | Generate memory config from org chart |
+| `aof memory audit` | Audit memory config vs. org chart |
+| `aof memory curate` | Generate curation tasks |
+
+### Observability
+| Command | Description |
+|---|---|
+| `aof board` | Display Kanban board |
+| `aof watch <viewType>` | Watch view directory (real-time) |
+| `aof metrics serve` | Start Prometheus metrics server |
+| `aof lint` | Lint all task files |
+
+---
 
 ## Testing
 
 ```bash
-# Run all tests
+# Run full test suite (2,195 tests)
 npm test
 
-# Run unit tests only
-npm test -- --testPathPattern="src/.*/.*\\.test\\.ts$"
-
-# Run e2e tests
-npm run test:e2e
+# Run targeted tests
+npx vitest run src/dispatch
 
 # Watch mode
 npm run test:watch
 ```
 
-Test suite: 164 test files, ~1308 tests total.
+---
 
 ## Project Structure
 
 ```
-~/Projects/AOF/
-├── src/              # TypeScript source
-├── dist/             # Compiled output
-├── tasks/            # Task files (backlog, ready, in-progress, etc.)
-├── org/              # Org chart and config
-├── events/           # JSONL event log
-├── views/            # Kanban and mailbox views
-├── memory/           # Memory tier directories
-├── docs/             # Documentation
-├── tests/            # Test suites
-└── scripts/          # Build and deployment scripts
+aof/
+├── src/              TypeScript source
+├── dist/             Compiled output
+├── tests/            Integration and e2e test suites
+├── tasks/            Task files (backlog/, ready/, in-progress/, etc.)
+├── org/              Org chart YAML and config
+├── events/           JSONL event log
+├── views/            Kanban and mailbox view files
+├── memory/           Memory tier directories
+├── docs/             Documentation
+└── scripts/          Build and deployment scripts
 ```
+
+---
+
+## Documentation
+
+| Document | Description |
+|---|---|
+| [docs/WORKFLOW-GATES.md](docs/WORKFLOW-GATES.md) | Workflow gate configuration and examples |
+| [docs/PROTOCOLS-USER-GUIDE.md](docs/PROTOCOLS-USER-GUIDE.md) | Inter-agent protocol reference |
+| [docs/task-format.md](docs/task-format.md) | Full task frontmatter schema |
+| [docs/SLA-GUIDE.md](docs/SLA-GUIDE.md) | SLA configuration and enforcement |
+| [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) | Deployment guide |
+| [docs/notification-policy.md](docs/notification-policy.md) | Notification engine configuration |
+| [docs/RECOVERY-RUNBOOK.md](docs/RECOVERY-RUNBOOK.md) | Recovery procedures |
+| [docs/memory-medallion-pipeline.md](docs/memory-medallion-pipeline.md) | Memory tier architecture |
+
+---
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup, coding standards, and the pull request process.
+
+---
 
 ## License
 
-MIT
+MIT — see [LICENSE](LICENSE).

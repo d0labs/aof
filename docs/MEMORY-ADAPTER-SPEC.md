@@ -166,7 +166,7 @@ Context assembly **must not fail** if recall returns empty. Explicit file refere
 ---
 
 ## Compatibility Requirements
-- Works in OpenClaw runtime **and** Mule container.
+- Works in OpenClaw runtime and containerized deployments.
 - All adapters must be able to run without network access by default.
 - File size <300 LOC per file (hard 500), functions <60 LOC (hard 120).
 

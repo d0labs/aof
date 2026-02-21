@@ -204,8 +204,8 @@ Validate recovery hardening features (watchdog, recovery hooks, deadletter, SLA,
 2. Run locally: `cd ~/Projects/AOF && npx vitest run tests/integration/recovery-hardening.test.ts`
 3. Verify all 5 features work together (Gate 2)
 
-### Phase 3: Mule Sandbox (end-to-end)
-1. Deploy to Mule sandbox
+### Phase 3: Staging (end-to-end)
+1. Deploy to staging environment
 2. Run smoke test covering all features
 3. Verify no production regressions (Gate 3)
 
@@ -273,7 +273,7 @@ I'll send a message to swe-backend with:
 
 - [ ] All 5 tasks pass unit tests (Gate 1)
 - [ ] Integration tests pass locally (Gate 2)
-- [ ] Smoke tests pass on Mule sandbox (Gate 3)
+- [ ] Smoke tests pass on staging (Gate 3)
 - [ ] No regressions in existing test suite
 - [ ] Test coverage: >80% for new code paths
 - [ ] Negative cases covered (minimum 2 per feature)

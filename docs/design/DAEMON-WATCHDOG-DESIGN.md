@@ -328,7 +328,7 @@ services:
 - Verify restart behavior matches spec
 
 ### Gate 3 Validation
-- Deploy to Mule sandbox
+- Deploy to staging environment
 - Simulate daemon failures (kill process, block scheduler)
 - Verify watchdog restarts daemon and alerts ops team
 

@@ -40,7 +40,7 @@ Deployment artifacts (plugins, services, integrations with external systems) hav
 - **Containerized test environments are required** when production is high-risk
 
 ### 5. Deploy Instructions Are Simple and Tested
-- A non-SWE coordinator (Demerzel, ops) can follow the instructions without debugging
+- A non-SWE coordinator (ops role) can follow the instructions without debugging
 - Instructions are **tested** (not theoretical)
 - Rollback procedure exists and is documented
 
