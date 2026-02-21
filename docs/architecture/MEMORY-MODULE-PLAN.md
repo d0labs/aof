@@ -16,7 +16,7 @@ AOF becomes the OpenClaw memory plugin (`kind: "memory"`), replacing memory-core
 - **Medallion integration** — tier-aware scoring, optional curation pipeline
 - **Module isolation** — memory v1 works standalone (zero deps on dispatch/scheduler/murmur)
 
-**Implementation**: 21 beads tasks, estimated 6-8 hours of focused engineering work.
+**Implementation**: ~21 tasks across 5 phases, estimated 6-8 hours of focused engineering work.
 
 ---
 
@@ -93,7 +93,7 @@ Config example:
             "embedding": {
               "provider": "openai",
               "model": "nomic-embed-text",
-              "baseUrl": "http://100.91.2.71:11434/v1",
+              "baseUrl": "http://localhost:11434/v1",
               "apiKey": "ollama"
             },
             "search": {
@@ -190,60 +190,60 @@ src/memory/
 
 ## Implementation Plan
 
-### Phase 1: Foundation (5 tasks, ~2-3 hours)
+### Phase 1: Foundation (~2-3 hours)
 
-| Task | Description | LOC | File |
+| Step | Description | LOC | File |
 |------|-------------|-----|------|
-| AOF-j2v | Add sqlite-vec dependency, verify macOS ARM compatibility | - | package.json |
-| AOF-28g | Update config schema (modules.memory, embedding, search) | - | package.json, openclaw.plugin.json |
-| AOF-7sr | Embedding provider interface | 30 | src/memory/embeddings/provider.ts |
-| AOF-329 | SQLite schema + migrations | 100 | src/memory/store/schema.ts |
-| AOF-ce1 | Markdown chunker | 150 | src/memory/chunking/chunker.ts |
-| AOF-obq | File hash tracker | 80 | src/memory/chunking/hash.ts |
+| 1 | Add sqlite-vec dependency, verify macOS ARM compatibility | — | package.json |
+| 2 | Update config schema (modules.memory, embedding, search) | — | package.json, openclaw.plugin.json |
+| 3 | Embedding provider interface | 30 | src/memory/embeddings/provider.ts |
+| 4 | SQLite schema + migrations | 100 | src/memory/store/schema.ts |
+| 5 | Markdown chunker | 150 | src/memory/chunking/chunker.ts |
+| 6 | File hash tracker (change detection) | 80 | src/memory/chunking/hash.ts |
 
 **Ready to start immediately** (no blockers).
 
-### Phase 2: Embedding & Store (4 tasks, ~1.5-2 hours)
+### Phase 2: Embedding & Store (~1.5-2 hours)
 
-| Task | Description | Depends On |
+| Step | Description | Depends On |
 |------|-------------|------------|
-| AOF-e7a | OpenAI-compatible embedding provider | AOF-7sr |
-| AOF-wek | Vector store CRUD (sqlite-vec) | AOF-329, AOF-j2v |
-| AOF-ncc | FTS5 store operations | AOF-329 |
-| AOF-2qx | Hybrid search engine | AOF-wek, AOF-ncc |
+| 7 | OpenAI-compatible embedding provider | Step 3 |
+| 8 | Vector store CRUD (sqlite-vec) | Steps 1, 4 |
+| 9 | FTS5 store operations | Step 4 |
+| 10 | Hybrid search engine | Steps 8, 9 |
 
 **Unblocked after phase 1 completes.**
 
-### Phase 3: Tools (6 tasks, ~1.5-2 hours)
+### Phase 3: Tools (~1.5-2 hours)
 
-| Task | Description | Depends On |
+| Step | Description | Depends On |
 |------|-------------|------------|
-| AOF-ffu | memory_get tool | (none) |
-| AOF-ko6 | memory_list tool | AOF-329 |
-| AOF-o6i | memory_delete tool | AOF-wek, AOF-ncc |
-| AOF-uz3 | memory_update tool | AOF-ce1, AOF-obq, AOF-wek, AOF-ncc |
-| AOF-e3t | memory_store tool | AOF-ce1, AOF-obq, AOF-wek, AOF-ncc, AOF-e7a |
-| AOF-34z | memory_search tool | AOF-2qx, AOF-e7a |
+| 11 | memory_get tool | (none) |
+| 12 | memory_list tool | Step 4 |
+| 13 | memory_delete tool | Steps 8, 9 |
+| 14 | memory_update tool | Steps 5, 6, 8, 9 |
+| 15 | memory_store tool | Steps 5, 6, 7, 8, 9 |
+| 16 | memory_search tool | Steps 7, 10 |
 
 **Can run in parallel once dependencies are met.**
 
-### Phase 4: Integration (2 tasks, ~1 hour)
+### Phase 4: Integration (~1 hour)
 
-| Task | Description | Depends On |
+| Step | Description | Depends On |
 |------|-------------|------------|
-| AOF-tyn | Index sync service | AOF-obq, AOF-ce1, AOF-e7a, AOF-wek, AOF-ncc |
-| AOF-a39 | Module registration + plugin wiring | All tools + AOF-tyn |
+| 17 | Index sync service | Steps 5, 6, 7, 8, 9 |
+| 18 | Module registration + plugin wiring | Steps 11-17 |
 
 **Final integration step.**
 
-### Phase 5: Testing & Docs (4 tasks, ~1.5-2 hours)
+### Phase 5: Testing & Docs (~1.5-2 hours)
 
-| Task | Description | Depends On |
+| Step | Description | Depends On |
 |------|-------------|------------|
-| AOF-tjq | Unit tests for embeddings | AOF-7sr, AOF-e7a |
-| AOF-71h | Unit tests for stores | AOF-wek, AOF-ncc, AOF-2qx |
-| AOF-oj6 | Integration test (full pipeline) | AOF-a39 |
-| AOF-2kb | README documentation | AOF-a39 |
+| 19 | Unit tests for embeddings | Steps 3, 7 |
+| 20 | Unit tests for stores | Steps 8, 9, 10 |
+| 21 | Integration test (full pipeline) | Step 18 |
+| 22 | README documentation | Step 18 |
 
 **Can start unit tests early (parallel with phase 3). Integration test and docs at the end.**
 
@@ -271,7 +271,7 @@ src/memory/
 
 **Issue**: Must verify sqlite-vec works on macOS ARM and Linux x64 before considering tasks complete.
 
-**Resolution**: AOF-j2v includes explicit platform testing. If manual builds required, escalate immediately.
+**Resolution**: Phase 1 includes explicit platform testing (sqlite-vec dependency step). If manual builds required, escalate immediately.
 
 **Action**: Test on local macOS ARM first, then verify on Linux in CI.
 
@@ -281,7 +281,7 @@ src/memory/
 
 **Resolution**: Memory module has its own pool config initially (in `config.memory.indexPaths`). Can unify in phase 2 if both modules are enabled. This maintains module independence for v1.
 
-**Action**: Document in config schema task (AOF-28g).
+**Action**: Document in the config schema implementation step (Phase 1).
 
 ---
 
@@ -301,52 +301,50 @@ src/memory/
 ## Dependency Graph
 
 ```
-Foundation (parallel):
-  AOF-j2v (sqlite-vec dependency)
-  AOF-28g (config schema)
-  AOF-7sr (embedding interface)
-  AOF-329 (SQLite schema)
-  AOF-ce1 (chunker)
-  AOF-obq (hash tracker)
-  
-Layer 2:
-  AOF-e7a (OpenAI provider) ← AOF-7sr
-  AOF-wek (vector store) ← AOF-329, AOF-j2v
-  AOF-ncc (FTS5 store) ← AOF-329
+Foundation (parallel, Phase 1):
+  sqlite-vec dependency
+  config schema update
+  embedding provider interface
+  SQLite schema + migrations
+  markdown chunker
+  file hash tracker
+
+Layer 2 (Phase 2):
+  OpenAI embedding provider ← embedding interface
+  vector store (sqlite-vec)  ← SQLite schema, sqlite-vec
+  FTS5 store                 ← SQLite schema
 
 Layer 3:
-  AOF-2qx (hybrid search) ← AOF-wek, AOF-ncc
+  hybrid search engine       ← vector store, FTS5 store
 
-Tools (parallel after dependencies):
-  AOF-ffu (memory_get) ← (none)
-  AOF-ko6 (memory_list) ← AOF-329
-  AOF-o6i (memory_delete) ← AOF-wek, AOF-ncc
-  AOF-uz3 (memory_update) ← AOF-ce1, AOF-obq, AOF-wek, AOF-ncc
-  AOF-e3t (memory_store) ← AOF-ce1, AOF-obq, AOF-wek, AOF-ncc, AOF-e7a
-  AOF-34z (memory_search) ← AOF-2qx, AOF-e7a
+Tools (Phase 3, parallel after Layer 2):
+  memory_get     ← (none)
+  memory_list    ← SQLite schema
+  memory_delete  ← vector store, FTS5 store
+  memory_update  ← chunker, hash tracker, vector store, FTS5 store
+  memory_store   ← chunker, hash tracker, embedding provider, vector store, FTS5 store
+  memory_search  ← hybrid search, embedding provider
 
-Services:
-  AOF-tyn (index sync) ← AOF-obq, AOF-ce1, AOF-e7a, AOF-wek, AOF-ncc
+Services (Phase 4):
+  index sync service   ← hash tracker, chunker, embedding provider, stores
+  module registration  ← all tools + index sync
 
-Integration:
-  AOF-a39 (module registration) ← all tools + AOF-tyn
-
-Testing:
-  AOF-tjq (embedding tests) ← AOF-7sr, AOF-e7a
-  AOF-71h (store tests) ← AOF-wek, AOF-ncc, AOF-2qx
-  AOF-oj6 (integration test) ← AOF-a39
+Testing (Phase 5):
+  embedding unit tests ← embedding interface, provider
+  store unit tests     ← vector store, FTS5 store, hybrid search
+  integration test     ← module registration
 
 Docs:
-  AOF-2kb (README) ← AOF-a39
+  README               ← module registration
 ```
 
 ---
 
 ## Next Steps
 
-1. **Start phase 1 foundation tasks** (AOF-j2v, AOF-28g, AOF-7sr, AOF-329, AOF-ce1, AOF-obq) — all ready to start immediately
+1. **Start phase 1 foundation tasks** — all ready to start immediately (no blockers)
 2. **Review this plan** with project lead for approval
-3. **Spawn swe-backend** for implementation (or start with AOF-j2v as a quick validation task)
+3. **Assign swe-backend** for implementation (start with sqlite-vec dependency as a quick validation step)
 4. **Iterative review** after each phase completes
 
 ---

@@ -714,7 +714,7 @@ See the `examples/` directory for complete workflow samples:
 
 - **[Design Document](design/WORKFLOW-GATES-DESIGN.md)** — Complete technical design and architecture
 - **[API Reference](API.md)** — Programmatic workflow API
-- **[Beads Integration](BEADS-INTEGRATION.md)** — Task management integration
+- **[Task Format](task-format.md)** — Task file structure and frontmatter schema
 
 ---
 

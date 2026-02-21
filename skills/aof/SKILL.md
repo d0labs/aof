@@ -5,7 +5,7 @@ description: >
   task management, org-chart governance, workflow gates, and structured inter-agent protocols.
   Use when: creating/managing agent tasks, running the scheduler, setting up org charts,
   coordinating multi-agent handoffs, monitoring system health, or configuring notifications.
-  Project lives at ~/Projects/AOF/. Beads CLI (bd) manages tasks.
+  Project lives at ~/Projects/AOF/. AOF CLI manages tasks.
 version: 1.0.0
 requires:
   bins: [node, git]
@@ -23,7 +23,7 @@ observable, restart-safe operating environment. No LLMs in the control plane.
 |----------|------------|
 | Coordinating work across multiple specialized agents | Org-chart routing + scheduler |
 | Enforcing multi-stage review workflows (code → review → QA → ship) | Workflow Gates |
-| Tracking tasks with dependencies and priorities | Beads (bd) task system |
+| Tracking tasks with dependencies and priorities | AOF task management |
 | Ensuring crashed agents can recover mid-task | Run artifacts + resume protocol |
 | Delegating subtasks to child agents with context | Handoff protocol |
 | Broadcasting status updates during long tasks | Status update protocol |
@@ -130,31 +130,32 @@ aof metrics serve         # Start Prometheus metrics endpoint
 
 ---
 
-## Beads — Task Management
+## Task Management
 
-AOF uses **Beads** (`bd`) for task tracking. Tasks are the unit of work dispatched to agents.
+AOF uses its own filesystem-based task tracking. Tasks are Markdown files dispatched to agents by the scheduler.
 
 ### Core Commands
 
 ```bash
 # Create tasks
-bd create "Implement JWT auth" --description "Add token validation middleware" --json
-bd q "Quick capture title"                    # Fast create, returns ID only
+aof task create "Implement JWT auth" --agent swe-backend --priority high
+aof task create "Quick capture title"          # defaults: normal priority, _inbox project
 
 # Navigate tasks
-bd list                                        # All open tasks
-bd list --status ready                         # Filter by status
-bd show AOF-abc                                # Full task details (JSON)
-bd show AOF-abc --json                         # Machine-readable
+aof scan                                       # All tasks by status
+aof scan --status ready                        # Filter by status
+aof board                                      # Kanban view
 
 # Manage tasks
-bd update AOF-abc --claim                      # Claim (mark in-progress)
-bd update AOF-abc --status blocked             # Update status
-bd close AOF-abc                               # Mark done
+aof task promote TASK-<id>                     # backlog → ready
+aof task block TASK-<id> "Reason"              # Mark blocked
+aof task unblock TASK-<id>                     # Unblock
+aof task close TASK-<id>                       # Mark done
 
 # Dependencies
-bd dep add AOF-child AOF-blocker               # child depends on blocker
-bd ready --json                                # List tasks with no open blockers
+aof task dep add TASK-child TASK-blocker       # child depends on blocker
+aof task dep remove TASK-child TASK-blocker    # remove dependency
+aof scan --status ready                        # tasks with no open blockers
 ```
 
 ### Task Lifecycle
@@ -585,14 +586,13 @@ rules:
 ### 1. Create and Dispatch a Task
 
 ```bash
-# Create task
-bd create "Add OAuth2 support" \
-  --description "Implement Google OAuth2 login flow" \
-  --json
-# → returns { "id": "AOF-abc" }
+# Create task (lands in backlog)
+aof task create "Add OAuth2 support" \
+  --agent swe-backend \
+  --priority high
 
-# Optionally promote from backlog to ready
-cd ~/Projects/AOF && aof task promote AOF-abc
+# Promote from backlog to ready
+aof task promote TASK-<id>
 
 # Run scheduler to dispatch
 aof scheduler run --active
@@ -610,8 +610,8 @@ aof org drift                    # Active agents vs. org chart
 ### 3. Handle a Blocked Task
 
 ```bash
-bd show AOF-abc                  # See why it's blocked
-bd update AOF-abc --status ready # Unblock (after resolving blocker)
+cat tasks/blocked/TASK-<id>.md   # See why it's blocked
+aof task unblock TASK-<id>       # Unblock (after resolving the blocker)
 aof scheduler run --active       # Redispatch
 ```
 
@@ -636,16 +636,19 @@ aof org drift org/org-chart.yaml
 
 ```bash
 # Create tasks with blocking dependencies
-bd create "Design API schema" --json          # AOF-001
-bd create "Implement API" --json              # AOF-002
-bd create "Write API docs" --json             # AOF-003
+aof task create "Design API schema"           # → TASK-2026-02-21-001
+aof task create "Implement API"               # → TASK-2026-02-21-002
+aof task create "Write API docs"              # → TASK-2026-02-21-003
 
 # Set up dependency chain: 002 waits on 001, 003 waits on 002
-bd dep add AOF-002 AOF-001
-bd dep add AOF-003 AOF-002
+aof task dep add TASK-2026-02-21-002 TASK-2026-02-21-001
+aof task dep add TASK-2026-02-21-003 TASK-2026-02-21-002
 
-# Only AOF-001 is ready now
-bd ready --json
+# Promote all to ready; scheduler dispatches only TASK-001 (others blocked)
+aof task promote TASK-2026-02-21-001
+aof task promote TASK-2026-02-21-002
+aof task promote TASK-2026-02-21-003
+aof scan --status ready
 ```
 
 ---

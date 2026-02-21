@@ -2259,7 +2259,7 @@ gates:  # Ordered gate list
 3. **Define schema:** Finalize task frontmatter and workflow config (section 2)
 4. **Spike conditional expressions:** Test JavaScript sandbox for `when` clauses, measure performance
 5. **Design telemetry schema:** Lock down metric names and labels (section 7)
-6. **Decompose into tasks:** Create beads tasks for Phase 1 implementation
+6. **Decompose into tasks:** Create AOF tasks for Phase 1 implementation
 7. **Implementation:** swe-backend implements core, swe-qa validates with test workflows
 
 ---

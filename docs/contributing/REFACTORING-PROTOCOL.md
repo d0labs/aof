@@ -68,7 +68,7 @@ npm test
 
 ```bash
 git add -A
-git commit -m "<beads-id>: Extract <symbol> to <target>"
+git commit -m "refactor: extract <symbol> to <target>"
 ```
 
 **One commit per extraction step.** Not one commit per file — one commit per logical move that keeps tests green.
