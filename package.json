@@ -24,6 +24,7 @@
   },
   "files": [
     "dist/",
+    "prompts/",
     "index.ts",
     "openclaw.plugin.json",
     "README.md"
