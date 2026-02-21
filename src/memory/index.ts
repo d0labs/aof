@@ -8,6 +8,8 @@ import { VectorStore } from "./store/vector-store.js";
 import { HnswIndex } from "./store/hnsw-index.js";
 import { FtsStore } from "./store/fts-store.js";
 import { HybridSearchEngine } from "./store/hybrid-search.js";
+import { createReranker } from "./store/reranker.js";
+import type { RerankerConfig } from "./store/reranker.js";
 import { OpenAIEmbeddingProvider } from "./embeddings/openai-provider.js";
 import { createMemorySearchTool } from "./tools/search.js";
 import { createMemoryStoreTool } from "./tools/store.js";
@@ -40,6 +42,7 @@ interface _MemoryModuleConfig {
   defaultPool?: string;
   defaultTier?: string;
   defaultLimit?: number;
+  reranker?: RerankerConfig;
 }
 
 interface _PluginConfig {
@@ -111,7 +114,18 @@ export function registerMemoryModule(api: OpenClawApi): void {
   const defaultTier = memoryCfg.defaultTier ?? "hot";
   const defaultLimit = memoryCfg.defaultLimit ?? 20;
 
-  api.registerTool(createMemorySearchTool({ embeddingProvider, searchEngine }));
+  const reranker = memoryCfg.reranker
+    ? createReranker(memoryCfg.reranker)
+    : null;
+  const topKBeforeRerank = memoryCfg.reranker?.topKBeforeRerank;
+
+  api.registerTool(
+    createMemorySearchTool({
+      embeddingProvider,
+      searchEngine,
+      ...(reranker ? { reranker, topKBeforeRerank } : {}),
+    }),
+  );
   api.registerTool(createMemoryStoreTool({ db, embeddingProvider, vectorStore, ftsStore, poolPaths, defaultPool, defaultTier }));
   api.registerTool(createMemoryUpdateTool({ db, embeddingProvider, vectorStore, ftsStore }));
   api.registerTool(createMemoryDeleteTool({ db, vectorStore, ftsStore }));

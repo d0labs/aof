@@ -4,6 +4,8 @@ import type { OpenClawToolDefinition, ToolResult } from "../../openclaw/types.js
 import type { EmbeddingProvider } from "../embeddings/provider.js";
 import { chunkMarkdown } from "../chunking/chunker.js";
 import type { HybridSearchEngine, HybridSearchResult } from "../store/hybrid-search.js";
+import type { Reranker } from "../store/reranker.js";
+import { DEFAULT_TOP_K_BEFORE_RERANK } from "../store/reranker.js";
 
 type MemorySearchParams = {
   query: string;
@@ -18,6 +20,17 @@ type MemorySearchToolOptions = {
   searchEngine: HybridSearchEngine;
   defaultMaxResults?: number;
   defaultMinScore?: number;
+  /**
+   * Optional cross-encoder reranker. When set, the search engine fetches
+   * `topKBeforeRerank` candidates, the reranker scores them, then the final
+   * `limit` results are returned.
+   */
+  reranker?: Reranker;
+  /**
+   * Candidate pool size passed to hybrid search when reranking is active.
+   * Defaults to DEFAULT_TOP_K_BEFORE_RERANK (20).
+   */
+  topKBeforeRerank?: number;
 };
 
 type LineRange = {
@@ -185,11 +198,21 @@ export const createMemorySearchTool = (
         return buildResult("Embedding provider returned no vectors.");
       }
 
-      const results = options.searchEngine.search({
+      // When reranking, fetch a larger candidate pool from hybrid search so
+      // the cross-encoder can surface results that scored lower on vector/BM25.
+      const candidateLimit = options.reranker
+        ? Math.max(limit, options.topKBeforeRerank ?? DEFAULT_TOP_K_BEFORE_RERANK)
+        : limit;
+
+      const hybridResults = options.searchEngine.search({
         query,
         embedding,
-        limit,
+        limit: candidateLimit,
       });
+
+      const results = options.reranker
+        ? await options.reranker.rerank(query, hybridResults)
+        : hybridResults;
 
       const filtered = filterResults(results, tiers, pools, minScore).slice(
         0,

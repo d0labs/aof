@@ -25,6 +25,7 @@
   "files": [
     "dist/",
     "prompts/",
+    "skills/",
     "index.ts",
     "openclaw.plugin.json",
     "README.md"
@@ -244,6 +245,27 @@
                 }
               }
             },
+            "reranker": {
+              "type": "object",
+              "description": "Local cross-encoder reranker (no API calls). Requires @huggingface/transformers.",
+              "properties": {
+                "enabled": {
+                  "type": "boolean",
+                  "default": false,
+                  "description": "Enable reranking after hybrid search"
+                },
+                "modelPath": {
+                  "type": "string",
+                  "description": "HuggingFace model ID or local path. Default: Xenova/ms-marco-MiniLM-L-6-v2 (~22MB quantized ONNX)"
+                },
+                "topKBeforeRerank": {
+                  "type": "number",
+                  "minimum": 1,
+                  "default": 20,
+                  "description": "Candidates fetched from hybrid search before reranking"
+                }
+              }
+            },
             "indexPaths": {
               "type": "array",
               "items": {
@@ -255,5 +277,8 @@
       },
       "additionalProperties": false
     }
+  },
+  "optionalDependencies": {
+    "@huggingface/transformers": "^3.8.1"
   }
 }
