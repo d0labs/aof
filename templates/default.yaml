@@ -14,7 +14,7 @@ teams:
 
 agents:
   - id: main
-    name: Demerzel
+    name: Main Agent
     description: Strategic AI partner — orchestration, coordination, escalation
     canDelegate: true
     capabilities:
