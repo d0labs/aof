@@ -296,11 +296,17 @@ Gates are defined in `project.yaml` and reference roles from the org chart.
 
 ### Setup
 ```bash
-aof init                          # Interactive OpenClaw integration wizard
+aof init                          # Interactive wizard (plugin, sync, memory, skill)
 aof init --yes                    # Non-interactive with defaults
 aof org validate org-chart.yaml   # Validate org chart schema
 aof org drift                     # Show agents in org chart vs. OpenClaw
 ```
+
+**Agent sync (runs as part of `aof init`):**
+- **Import:** Discovers OpenClaw agents and offers to add them to `org/org-chart.yaml`
+- **Export:** Registers org chart agents missing from OpenClaw config
+- **Drift check:** Shows remaining mismatches after sync
+- Idempotent — safe to run repeatedly
 
 ### Monitoring
 ```bash

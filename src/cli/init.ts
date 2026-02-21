@@ -1,170 +1,320 @@
 /**
- * AOF Init Command
- * Interactive installation wizard for new AOF setups.
+ * AOF Init — OpenClaw Integration Wizard
+ *
+ * Registers AOF as an OpenClaw plugin, optionally sets up the memory system,
+ * and installs the companion skill. All config changes go through
+ * `openclaw config set` — NEVER edits openclaw.json directly.
  */
 
-import { resolve } from "node:path";
+import { confirm, select } from "@inquirer/prompts";
+import { mkdir, copyFile, access } from "node:fs/promises";
+import { fileURLToPath } from "node:url";
+import { join, dirname, resolve } from "node:path";
 import { homedir } from "node:os";
-import { stdin as input, stdout as output } from "node:process";
-import * as readline from "node:readline/promises";
-import { runWizard, detectOpenClaw, type WizardOptions } from "../packaging/wizard.js";
+import {
+  detectOpenClaw,
+  isAofPluginRegistered,
+  isAofInAllowList,
+  registerAofPlugin,
+  addAofToAllowList,
+  detectMemoryPlugin,
+  configureAofAsMemoryPlugin,
+  isAofMemoryEnabled,
+  isAofMemorySlot,
+} from "../packaging/openclaw-cli.js";
+import { runSyncStep } from "./init-sync.js";
+
+/** Path to this compiled file's directory (dist/cli/) at runtime. */
+const __filename = fileURLToPath(import.meta.url);
+const __dir = dirname(__filename);
+
+/** Root of the AOF package (two levels up from dist/cli/). */
+const PKG_ROOT = resolve(__dir, "..", "..");
 
 export interface InitOptions {
-  /** Installation directory (defaults to ~/Projects/AOF) */
-  dir?: string;
-  /** Template name (minimal or full) */
-  template?: "minimal" | "full";
-  /** Non-interactive mode (use defaults) */
+  /** Non-interactive mode — use defaults, skip all prompts. */
   yes?: boolean;
-  /** Skip OpenClaw integration check */
+  /** Skip OpenClaw integration steps. */
   skipOpenclaw?: boolean;
-  /** Force overwrite existing installation */
-  force?: boolean;
+}
+
+interface WizardState {
+  pluginRegistered: boolean;
+  addedToAllowList: boolean;
+  syncCompleted: boolean;
+  memoryConfigured: boolean;
+  skillInstalled: boolean;
+  warnings: string[];
+  skipped: string[];
 }
 
 /**
- * Run the init command (interactive or non-interactive).
+ * Main entry point for `aof init`.
  */
-export async function init(options: InitOptions): Promise<void> {
-  const {
-    dir,
-    template,
-    yes = false,
-    skipOpenclaw = false,
-    force = false,
-  } = options;
+export async function init(opts: InitOptions = {}): Promise<void> {
+  const { yes = false, skipOpenclaw = false } = opts;
 
-  console.log("🚀 AOF Installation Wizard\n");
+  console.log("\n🚀 AOF Integration Wizard\n");
+  console.log("This wizard will register AOF with OpenClaw, optionally");
+  console.log("configure the memory system, and install the companion skill.\n");
 
-  // Non-interactive mode: use provided options or defaults
-  if (yes) {
-    const installDir = dir ?? resolve(homedir(), "Projects", "AOF");
-    const selectedTemplate = template ?? "minimal";
+  const state: WizardState = {
+    pluginRegistered: false,
+    addedToAllowList: false,
+    syncCompleted: false,
+    memoryConfigured: false,
+    skillInstalled: false,
+    warnings: [],
+    skipped: [],
+  };
 
-    console.log("Running in non-interactive mode...");
-    console.log(`  Install directory: ${installDir}`);
-    console.log(`  Template: ${selectedTemplate}`);
-    console.log();
-
-    const wizardOpts: WizardOptions = {
-      installDir,
-      template: selectedTemplate,
-      interactive: false,
-      skipOpenClaw: skipOpenclaw,
-      healthCheck: true,
-      force,
-    };
-
-    const result = await runWizard(wizardOpts);
-
-    if (result.success) {
-      console.log("✅ Installation complete!\n");
-      console.log(`Installation directory: ${result.installDir}`);
-      console.log(`Org chart: ${result.orgChartPath}`);
-      console.log(`\nCreated ${result.created.length} files and directories.`);
-      
-      if (result.warnings && result.warnings.length > 0) {
-        console.log("\n⚠️  Warnings:");
-        for (const warning of result.warnings) {
-          console.log(`  - ${warning}`);
-        }
-      }
-
-      console.log("\n📚 Next steps:");
-      console.log(`  1. cd ${result.installDir}`);
-      console.log("  2. Review org/org-chart.yaml");
-      console.log("  3. Run 'aof scan' to verify setup");
-    } else {
-      console.error("❌ Installation failed");
-      process.exit(1);
-    }
-
+  if (skipOpenclaw) {
+    console.log("⏭  Skipping OpenClaw integration (--skip-openclaw).\n");
+    await runSkillStep(state, yes);
+    printSummary(state, null);
     return;
   }
 
-  // Interactive mode: prompt for options
-  const rl = readline.createInterface({ input, output });
+  // Step 1: Detect OpenClaw
+  console.log("🔍 Detecting OpenClaw installation...");
+  const detection = await detectOpenClaw();
 
-  try {
-    // Detect OpenClaw
-    if (!skipOpenclaw) {
-      const detection = await detectOpenClaw();
-      if (detection.detected) {
-        console.log(`✅ OpenClaw detected at ${detection.configPath}`);
-        if (detection.workspaceDir) {
-          console.log(`   Workspace: ${detection.workspaceDir}`);
-        }
-        console.log();
-      }
-    }
-
-    // Prompt for installation directory
-    const defaultDir = dir ?? resolve(homedir(), "Projects", "AOF");
-    const installDirAnswer = await rl.question(
-      `Installation directory [${defaultDir}]: `,
-    );
-    const installDir = installDirAnswer.trim() || defaultDir;
-
-    // Prompt for template
-    console.log("\nAvailable templates:");
-    console.log("  1. minimal - Single agent, simple setup (recommended for getting started)");
-    console.log("  2. full - Multi-agent team with delegation");
-    
-    const templateAnswer = await rl.question(
-      "\nSelect template [1]: ",
-    );
-    const selectedTemplate = 
-      templateAnswer.trim() === "2" ? "full" : "minimal";
-
-    console.log();
-
-    // Confirm and run wizard
-    const wizardOpts: WizardOptions = {
-      installDir,
-      template: selectedTemplate,
-      interactive: true,
-      skipOpenClaw: skipOpenclaw,
-      healthCheck: true,
-      force,
-    };
-
-    console.log("Starting installation...\n");
-    const result = await runWizard(wizardOpts);
-
-    if (result.success) {
-      console.log("\n✅ Installation complete!\n");
-      console.log(`Installation directory: ${result.installDir}`);
-      console.log(`Org chart: ${result.orgChartPath}`);
-      console.log(`\nCreated ${result.created.length} files and directories:`);
-      
-      for (const item of result.created) {
-        console.log(`  ✓ ${item}`);
-      }
-
-      if (result.warnings && result.warnings.length > 0) {
-        console.log("\n⚠️  Warnings:");
-        for (const warning of result.warnings) {
-          console.log(`  - ${warning}`);
-        }
-      }
-
-      if (result.openclawDetected) {
-        console.log("\n🔗 OpenClaw Integration:");
-        console.log("  OpenClaw detected. You can configure AOF to work with OpenClaw agents.");
-        console.log("  Edit org/org-chart.yaml to add openclawAgentId fields.");
-      }
-
-      console.log("\n📚 Next steps:");
-      console.log(`  1. cd ${result.installDir}`);
-      console.log("  2. Review org/org-chart.yaml");
-      console.log("  3. Create your first task in tasks/ready/");
-      console.log("  4. Run 'aof scheduler run' to test the setup");
-      console.log("\n📖 Documentation: https://github.com/xavierxeon/aof");
-    } else {
-      console.error("\n❌ Installation failed");
-      process.exit(1);
-    }
-  } finally {
-    rl.close();
+  if (!detection.detected || !detection.configPath) {
+    console.log("⚠️  OpenClaw not detected (config not found at ~/.openclaw/openclaw.json).");
+    console.log("   Install OpenClaw first, or run with --skip-openclaw for standalone setup.\n");
+    await runSkillStep(state, yes);
+    printSummary(state, null);
+    return;
   }
+
+  console.log(`✅ OpenClaw detected${detection.version ? ` (${detection.version})` : ""}.\n`);
+
+  // Step 2: Plugin registration
+  await runPluginStep(state, yes);
+
+  // Step 2.5: Org chart ↔ OpenClaw agent sync
+  const orgChartPath = join(process.cwd(), "org", "org-chart.yaml");
+  try {
+    const syncResult = await runSyncStep(orgChartPath, yes);
+    state.syncCompleted = syncResult.imported.length > 0 || syncResult.exported.length > 0;
+    state.warnings.push(...syncResult.warnings);
+  } catch {
+    state.warnings.push("Org chart sync failed — run `aof org drift` manually.");
+  }
+
+  // Step 3: Memory system
+  await runMemoryStep(state, yes);
+
+  // Step 4: Companion skill
+  await runSkillStep(state, yes);
+
+  // Summary
+  printSummary(state, detection.configPath);
+}
+
+// ---------------------------------------------------------------------------
+// Step implementations
+// ---------------------------------------------------------------------------
+
+async function runPluginStep(state: WizardState, yes: boolean): Promise<void> {
+  const alreadyRegistered = await isAofPluginRegistered();
+  const inAllowList = await isAofInAllowList();
+
+  if (alreadyRegistered && inAllowList) {
+    console.log("✅ AOF plugin already registered and in allow list — skipping.\n");
+    state.pluginRegistered = true;
+    state.addedToAllowList = true;
+    state.skipped.push("Plugin registration (already configured)");
+    return;
+  }
+
+  const pluginJsonPath = join(PKG_ROOT, "openclaw.plugin.json");
+
+  if (!alreadyRegistered) {
+    const doRegister =
+      yes ||
+      (await confirm({
+        message: "Register AOF as an OpenClaw plugin?",
+        default: true,
+      }));
+
+    if (doRegister) {
+      console.log("  Registering AOF plugin...");
+      try {
+        await registerAofPlugin(pluginJsonPath);
+        state.pluginRegistered = true;
+        state.addedToAllowList = true;
+        console.log("  ✅ Plugin registered and added to allow list.\n");
+      } catch (err) {
+        state.warnings.push(
+          `Plugin registration failed: ${err instanceof Error ? err.message : String(err)}`,
+        );
+        console.log(`  ❌ Registration failed: ${err instanceof Error ? err.message : String(err)}\n`);
+      }
+    } else {
+      state.skipped.push("Plugin registration");
+    }
+  } else if (!inAllowList) {
+    // Registered but not in allow list — add silently
+    console.log("  Plugin registered but not in allow list — adding...");
+    try {
+      await addAofToAllowList();
+      state.addedToAllowList = true;
+      console.log("  ✅ Added to allow list.\n");
+    } catch (err) {
+      state.warnings.push(
+        `Failed to add AOF to allow list: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+  }
+}
+
+async function runMemoryStep(state: WizardState, yes: boolean): Promise<void> {
+  // Check current state
+  const alreadyMemory = (await isAofMemorySlot()) && (await isAofMemoryEnabled());
+  if (alreadyMemory) {
+    console.log("✅ AOF memory system already configured — skipping.\n");
+    state.memoryConfigured = true;
+    state.skipped.push("Memory configuration (already active)");
+    return;
+  }
+
+  const wantMemory =
+    yes ||
+    (await confirm({
+      message: "Would you like to use AOF's built-in memory system?",
+      default: false,
+    }));
+
+  if (!wantMemory) {
+    state.skipped.push("Memory system");
+    console.log();
+    return;
+  }
+
+  // Detect current memory plugin
+  const { slotHolder, candidates } = await detectMemoryPlugin();
+  const currentPlugin = slotHolder ?? candidates[0];
+
+  if (currentPlugin) {
+    console.log(`\n  ⚠️  Current memory plugin: ${currentPlugin}`);
+    console.log(`  Enabling AOF memory will disable "${currentPlugin}" as the memory provider.`);
+
+    const confirmed =
+      yes ||
+      (await confirm({
+        message: `Disable "${currentPlugin}" and enable AOF memory?`,
+        default: false,
+      }));
+
+    if (!confirmed) {
+      state.skipped.push("Memory system (user declined)");
+      console.log();
+      return;
+    }
+  }
+
+  console.log("  Configuring AOF memory system...");
+  try {
+    await configureAofAsMemoryPlugin(currentPlugin);
+    state.memoryConfigured = true;
+    if (currentPlugin) {
+      console.log(`  ✅ "${currentPlugin}" disabled.`);
+    }
+    console.log("  ✅ AOF set as memory provider (slots.memory = aof).\n");
+    state.warnings.push("Restart the OpenClaw gateway to activate memory changes.");
+  } catch (err) {
+    state.warnings.push(
+      `Memory configuration failed: ${err instanceof Error ? err.message : String(err)}`,
+    );
+    console.log(`  ❌ Memory config failed: ${err instanceof Error ? err.message : String(err)}\n`);
+  }
+}
+
+async function runSkillStep(state: WizardState, yes: boolean): Promise<void> {
+  const skillDest = join(homedir(), ".openclaw", "skills", "aof", "SKILL.md");
+  const skillSrc = join(PKG_ROOT, "skills", "aof", "SKILL.md");
+
+  // Verify bundled skill exists
+  try {
+    await access(skillSrc);
+  } catch {
+    state.warnings.push("Bundled skill not found in package — skipping skill install.");
+    return;
+  }
+
+  // Check if already installed
+  try {
+    await access(skillDest);
+    console.log("✅ AOF companion skill already installed — skipping.\n");
+    state.skillInstalled = true;
+    state.skipped.push("Companion skill (already installed)");
+    return;
+  } catch {
+    // Not installed yet
+  }
+
+  const installSkill =
+    yes ||
+    (await confirm({
+      message: "Install the AOF companion skill for your AI agents?",
+      default: true,
+    }));
+
+  if (!installSkill) {
+    state.skipped.push("Companion skill");
+    console.log();
+    return;
+  }
+
+  console.log("  Installing companion skill...");
+  try {
+    await mkdir(dirname(skillDest), { recursive: true });
+    await copyFile(skillSrc, skillDest);
+    state.skillInstalled = true;
+    console.log(`  ✅ Skill installed at ${skillDest}\n`);
+  } catch (err) {
+    state.warnings.push(
+      `Skill installation failed: ${err instanceof Error ? err.message : String(err)}`,
+    );
+    console.log(`  ❌ Skill install failed: ${err instanceof Error ? err.message : String(err)}\n`);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Summary
+// ---------------------------------------------------------------------------
+
+function printSummary(state: WizardState, configPath: string | null | undefined): void {
+  console.log("─".repeat(60));
+  console.log("📋 Summary\n");
+
+  const done: string[] = [];
+  if (state.pluginRegistered) done.push("✅ AOF plugin registered");
+  if (state.addedToAllowList) done.push("✅ Added to allow list");
+  if (state.syncCompleted) done.push("✅ Org chart synced with OpenClaw agents");
+  if (state.memoryConfigured) done.push("✅ Memory system configured");
+  if (state.skillInstalled) done.push("✅ Companion skill installed");
+
+  for (const item of done) console.log(`  ${item}`);
+  for (const item of state.skipped) console.log(`  ⏭  ${item}`);
+
+  if (state.warnings.length > 0) {
+    console.log("\n⚠️  Warnings:");
+    for (const w of state.warnings) console.log(`  - ${w}`);
+  }
+
+  const hasGatewayWork = state.pluginRegistered || state.memoryConfigured;
+  const anythingDone = done.length > 0;
+
+  if (hasGatewayWork) {
+    console.log("\n🔄 Next step: restart the OpenClaw gateway to activate changes.");
+    console.log("   Run: openclaw gateway restart");
+  }
+
+  if (!anythingDone && state.skipped.length === 0 && state.warnings.length === 0) {
+    console.log("  (nothing to do)");
+  }
+
+  console.log();
 }
