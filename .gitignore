@@ -31,3 +31,4 @@ WORK-SESSION.md
 DEPLOY-TRACKER.md
 swe-process/
 tasks/backlog/*.md
+convert_tasks.py
