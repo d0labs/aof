@@ -6,13 +6,35 @@
   "engines": {
     "node": ">=22.0.0"
   },
-  "main": "dist/plugin.js",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    },
+    "./plugin": {
+      "import": "./dist/plugin.js",
+      "types": "./dist/plugin.d.ts"
+    }
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/demerzel-ops/aof.git"
+  },
+  "files": [
+    "dist/",
+    "index.ts",
+    "openclaw.plugin.json",
+    "README.md"
+  ],
   "bin": {
     "aof": "dist/cli/index.js",
     "aof-daemon": "dist/daemon/index.js"
   },
   "scripts": {
     "build": "tsc && node scripts/copy-extension-entry.js",
+    "prepublishOnly": "npm run build",
     "dev": "tsc --watch",
     "start": "node dist/cli/index.js",
     "deploy:plugin": "scripts/deploy-plugin.sh",
@@ -53,6 +75,14 @@
     "@types/node": "^22.0.0",
     "typescript": "^5.7.0",
     "vitest": "^3.0.0"
+  },
+  "peerDependencies": {
+    "openclaw": ">=2026.2.0"
+  },
+  "peerDependenciesMeta": {
+    "openclaw": {
+      "optional": true
+    }
   },
   "openclaw": {
     "id": "aof",
