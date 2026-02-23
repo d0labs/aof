@@ -10,6 +10,35 @@ import { generateMemoryConfigFile, auditMemoryConfigFile } from "../../commands/
 import { loadOrgChart } from "../../org/index.js";
 import { FilesystemTaskStore } from "../../store/task-store.js";
 
+function printImportReport(report: import("../../memory/import/index.js").ImportReport): void {
+  console.log("\n🔍 Memory Import Audit");
+  console.log(`  Sources scanned:  ${report.agents.length} SQLite file(s)`);
+  const totalIndexed = report.totalFilesIndexed;
+  const totalOnDisk  = report.agents.reduce((s, a) => s + a.filesOnDisk, 0);
+  console.log(`  Files indexed:    ${totalIndexed}`);
+  console.log(`  Files on disk:    ${totalOnDisk} ✅`);
+  console.log(`  Files missing:    ${report.totalFilesMissing} ${report.totalFilesMissing > 0 ? "⚠️" : ""}`);
+  console.log(`  Orphan chunks:    ${report.agents.reduce((s, a) => s + a.orphanChunks, 0)}`);
+  if (report.agents.length > 0) {
+    console.log("\n  Per-agent breakdown:");
+    for (const a of report.agents) {
+      const tag = a.errors.length > 0 ? "❌" : a.filesMissing > 0 ? "⚠️" : "✅";
+      console.log(`    ${tag} ${a.agentId} (${a.providerKind}) — ${a.filesIndexed} files, ${a.filesMissing} missing, ${a.orphanChunks} orphan chunks`);
+      for (const w of a.warnings) console.log(`       ⚠️  ${w}`);
+      for (const e of a.errors)   console.log(`       ❌ ${e}`);
+    }
+  }
+  const written = report.totalOrphansWritten;
+  if (written > 0) {
+    const path = report.agents.find(a => a.outputPath)?.outputPath ?? "";
+    console.log(`\n✅ Done. ${written} orphaned chunk(s) written to ${path}`);
+  } else if (report.dryRun) {
+    console.log("\n✅ Dry-run complete — no files written.");
+  } else {
+    console.log("\n✅ Done. No orphaned chunks to write.");
+  }
+}
+
 /**
  * Register memory commands with the CLI program.
  */
@@ -298,5 +327,26 @@ export function registerMemoryCommands(program: Command): void {
       if (result.tasksCreated.length === 0 && result.skipped.length === 0) {
         console.log("ℹ️  No curation tasks needed at this time");
       }
+    });
+
+  memory
+    .command("import")
+    .description("Audit and import memories from previous memory provider (memory-core SQLite, etc.)")
+    .option("--source-dir <path>", "Directory containing *.sqlite files", join(homedir(), ".openclaw", "memory"))
+    .option("--workspace <path>", "Base workspace for resolving relative file paths", join(homedir(), ".openclaw", "workspace"))
+    .option("--dry-run", "Report gaps without writing any files", false)
+    .option("--agent <id>", "Restrict to a single agent")
+    .option("--no-orphans", "Skip orphan extraction (audit only)", false)
+    .action(async (opts: { sourceDir: string; workspace: string; dryRun: boolean; agent?: string; noOrphans: boolean }) => {
+      const { runMemoryImport } = await import("../../memory/import/index.js");
+      const report = await runMemoryImport({
+        sourceDir: opts.sourceDir,
+        workspacePath: opts.workspace,
+        dryRun: opts.dryRun,
+        agentFilter: opts.agent,
+        noOrphans: opts.noOrphans,
+      });
+      printImportReport(report);
+      if (report.errors.length > 0) process.exitCode = 1;
     });
 }
