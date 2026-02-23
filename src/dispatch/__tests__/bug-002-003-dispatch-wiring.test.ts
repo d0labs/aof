@@ -205,26 +205,19 @@ describe("BUG-003: Silent Failure - No Error Logs (P0)", () => {
   let logger: EventLogger;
   let executor: MockExecutor;
   let events: BaseEvent[];
-  let consoleErrors: string[];
 
   beforeEach(async () => {
     tmpDir = await mkdtemp(join(tmpdir(), "bug003-test-"));
-    
+
     events = [];
     logger = new EventLogger(join(tmpDir, "events"), {
       onEvent: (event) => events.push(event),
     });
-    
+
     store = new FilesystemTaskStore(tmpDir, { logger });
     await store.init();
-    
-    executor = new MockExecutor();
 
-    // Capture console.error calls
-    consoleErrors = [];
-    vi.spyOn(console, "error").mockImplementation((...args) => {
-      consoleErrors.push(args.join(" "));
-    });
+    executor = new MockExecutor();
   });
 
   afterEach(async () => {
@@ -258,13 +251,6 @@ describe("BUG-003: Silent Failure - No Error Logs (P0)", () => {
 
     expect(errorEvent).toBeDefined();
     expect(errorEvent?.payload?.error).toContain("agent not found");
-
-    // Verify console.error was called (ERROR-level log)
-    expect(consoleErrors.length).toBeGreaterThan(0);
-    const hasErrorLog = consoleErrors.some(msg => 
-      msg.includes("ERROR") || msg.includes("error") || msg.includes("failed")
-    );
-    expect(hasErrorLog).toBe(true);
   });
 
   it("BUG-003: event log includes actionsFailed on execution failure", async () => {

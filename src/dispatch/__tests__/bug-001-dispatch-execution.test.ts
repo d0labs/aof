@@ -1,7 +1,7 @@
 /**
  * BUG-001: Scheduler Perpetual Execution Failure (P0)
  * Date: 2026-02-08 19:16 EST
- * 
+ *
  * Tests verify executor is invoked and execution path completes successfully.
  * Evidence: actionsPlanned:1 with actionsExecuted:0 and reason:execution_failed
  */
@@ -23,31 +23,19 @@ describe("BUG-001: Scheduler Perpetual Execution Failure (P0)", () => {
   let logger: EventLogger;
   let executor: MockExecutor;
   let events: BaseEvent[];
-  let consoleInfos: string[];
-  let consoleErrors: string[];
 
   beforeEach(async () => {
     tmpDir = await mkdtemp(join(tmpdir(), "bug001-exec-test-"));
-    
+
     events = [];
     logger = new EventLogger(join(tmpDir, "events"), {
       onEvent: (event) => events.push(event),
     });
-    
+
     store = new FilesystemTaskStore(tmpDir, { logger });
     await store.init();
-    
-    executor = new MockExecutor();
 
-    // Capture console logs
-    consoleInfos = [];
-    consoleErrors = [];
-    vi.spyOn(console, "info").mockImplementation((...args) => {
-      consoleInfos.push(args.join(" "));
-    });
-    vi.spyOn(console, "error").mockImplementation((...args) => {
-      consoleErrors.push(args.join(" "));
-    });
+    executor = new MockExecutor();
   });
 
   afterEach(async () => {
@@ -71,7 +59,6 @@ describe("BUG-001: Scheduler Perpetual Execution Failure (P0)", () => {
       executor,
     });
 
-    // Verify executor was called
     expect(executor.spawned.length).toBe(1);
     expect(executor.spawned[0]?.context.taskId).toBe(task.frontmatter.id);
     expect(executor.spawned[0]?.context.agent).toBe("test-agent");
@@ -93,7 +80,6 @@ describe("BUG-001: Scheduler Perpetual Execution Failure (P0)", () => {
       executor,
     });
 
-    // Task should be in-progress
     const updatedTask = await store.get(task.frontmatter.id);
     expect(updatedTask?.frontmatter.status).toBe("in-progress");
   });
@@ -114,7 +100,6 @@ describe("BUG-001: Scheduler Perpetual Execution Failure (P0)", () => {
       executor,
     });
 
-    // Check poll event
     const pollEvent = events.find(e => e.type === "scheduler.poll");
     expect(pollEvent?.payload?.actionsPlanned).toBe(1);
     expect(pollEvent?.payload?.actionsExecuted).toBe(1);
@@ -158,7 +143,6 @@ describe("BUG-001: Scheduler Perpetual Execution Failure (P0)", () => {
       executor,
     });
 
-    // Verify dispatch events
     const startEvent = events.find(e => e.type === "action.started");
     expect(startEvent).toBeDefined();
     expect(startEvent?.taskId).toBe(task.frontmatter.id);
@@ -188,7 +172,6 @@ describe("BUG-001: Scheduler Perpetual Execution Failure (P0)", () => {
       executor,
     });
 
-    // Acceptance criteria:
     // 1. Task transitions ready → in-progress
     const updatedTask = await store.get(task.frontmatter.id);
     expect(updatedTask?.frontmatter.status).toBe("in-progress");
@@ -203,7 +186,8 @@ describe("BUG-001: Scheduler Perpetual Execution Failure (P0)", () => {
     expect(startEvent?.taskId).toBe(task.frontmatter.id);
   });
 
-  it("BUG-001: console log shows dispatched count", async () => {
+  it("BUG-001: scheduler.poll event records dispatched count", async () => {
+    // ODD: assert on scheduler.poll event payload (not console text)
     const task = await store.create({
       title: "Test task",
       body: "Body",
@@ -219,18 +203,17 @@ describe("BUG-001: Scheduler Perpetual Execution Failure (P0)", () => {
       executor,
     });
 
-    // Verify console log shows dispatched count
-    const pollLog = consoleInfos.find(msg => msg.includes("Scheduler poll"));
-    expect(pollLog).toBeDefined();
-    expect(pollLog).toContain("1 dispatched");
-    expect(pollLog).toContain("0 failed");
+    const pollEvent = events.find(e => e.type === "scheduler.poll");
+    expect(pollEvent).toBeDefined();
+    expect(pollEvent?.payload?.actionsExecuted).toBe(1);
+    expect(pollEvent?.payload?.actionsFailed).toBe(0);
   });
 
   it("BUG-001: executor receives correct task context", async () => {
     const task = await store.create({
       title: "Context test",
       body: "Body",
-      routing: { 
+      routing: {
         agent: "test-agent",
         tags: ["priority", "backend"],
       },
@@ -245,7 +228,6 @@ describe("BUG-001: Scheduler Perpetual Execution Failure (P0)", () => {
       executor,
     });
 
-    // Verify context passed to executor
     expect(executor.spawned.length).toBe(1);
     const context = executor.spawned[0]?.context;
     expect(context?.taskId).toBe(task.frontmatter.id);

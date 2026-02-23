@@ -163,21 +163,16 @@ describe("DAG Dependency Gating", () => {
     });
     await store.transition(task.frontmatter.id, "ready");
 
-    const consoleSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const result = await poll(store, logger, config);
 
-    await poll(store, logger, config);
+    // ODD: blocked deps produce no assign action for the dependent task
+    const assignActions = result.actions.filter((a) => a.type === "assign");
+    expect(assignActions.find((a) => a.taskId === task.frontmatter.id)).toBeUndefined();
 
-    expect(consoleSpy).toHaveBeenCalledWith(
-      expect.stringContaining(`[AOF] Dependency gate: skipping ${task.frontmatter.id}`),
-    );
-    expect(consoleSpy).toHaveBeenCalledWith(
-      expect.stringContaining(dep1.frontmatter.id),
-    );
-    expect(consoleSpy).toHaveBeenCalledWith(
-      expect.stringContaining(dep2.frontmatter.id),
-    );
-
-    consoleSpy.mockRestore();
+    // Both blocking dep IDs are represented in the task's dependsOn
+    const updatedTask = await store.get(task.frontmatter.id);
+    expect(updatedTask?.frontmatter.dependsOn).toContain(dep1.frontmatter.id);
+    expect(updatedTask?.frontmatter.dependsOn).toContain(dep2.frontmatter.id);
   });
 
   it("supports transitive dependencies (A→B→C)", async () => {
@@ -258,20 +253,11 @@ describe("DAG Dependency Gating", () => {
     await store.transition(taskA.frontmatter.id, "ready");
     await store.transition(taskB.frontmatter.id, "ready");
 
-    const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
-
     const result = await poll(store, logger, config);
 
-    // Should detect circular dependency and log error
-    expect(consoleSpy).toHaveBeenCalledWith(
-      expect.stringContaining("[AOF] Circular dependency detected"),
-    );
-
-    // Should create block action for at least one of the tasks
+    // ODD: circular dependency → at least one task blocked (observable filesystem state)
     const blockActions = result.actions.filter((a) => a.type === "block");
     expect(blockActions.length).toBeGreaterThanOrEqual(1);
-
-    consoleSpy.mockRestore();
   });
 
   it("handles mixed scenario: some tasks with deps, some without", async () => {
@@ -318,19 +304,14 @@ describe("DAG Dependency Gating", () => {
     });
     await store.transition(task.frontmatter.id, "ready");
 
-    const consoleSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
-
     const result = await poll(store, logger, config);
 
-    // Should log warning about missing dependency
-    expect(consoleSpy).toHaveBeenCalledWith(
-      expect.stringContaining("[AOF] Dependency gate: skipping"),
-    );
-
-    // Should not dispatch the task
+    // ODD: task with missing dependency was not dispatched
     const assignActions = result.actions.filter((a) => a.type === "assign");
     expect(assignActions.find((a) => a.taskId === task.frontmatter.id)).toBeUndefined();
 
-    consoleSpy.mockRestore();
+    // Filesystem state: task remains in ready (not dispatched)
+    const updatedTask = await store.get(task.frontmatter.id);
+    expect(updatedTask?.frontmatter.status).toBe("ready");
   });
 });

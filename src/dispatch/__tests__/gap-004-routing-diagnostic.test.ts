@@ -23,32 +23,18 @@ describe("GAP-004: Agent Resolution Diagnostic", () => {
   let logger: EventLogger;
   let executor: MockExecutor;
   let events: BaseEvent[];
-  let consoleInfos: string[];
-  let consoleErrors: string[];
-
   beforeEach(async () => {
     tmpDir = await mkdtemp(join(tmpdir(), "gap004-test-"));
-    
+
     events = [];
     logger = new EventLogger(join(tmpDir, "events"), {
       onEvent: (event) => events.push(event),
     });
-    
+
     store = new FilesystemTaskStore(tmpDir, { logger });
     await store.init();
-    
-    executor = new MockExecutor();
 
-    // Capture console logs
-    consoleInfos = [];
-    consoleErrors = [];
-    vi.spyOn(console, "info").mockImplementation((...args) => {
-      consoleInfos.push(args.join(" "));
-    });
-    vi.spyOn(console, "error").mockImplementation((...args) => {
-      consoleErrors.push(args.join(" "));
-    });
-    vi.spyOn(console, "warn").mockImplementation(() => {});
+    executor = new MockExecutor();
   });
 
   afterEach(async () => {

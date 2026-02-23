@@ -1,8 +1,8 @@
 /**
  * BUG-002: Scheduler Log/Event Mismatch (P2)
  * Date: 2026-02-08 19:16 EST
- * 
- * Tests verify log output and event payload are semantically consistent.
+ *
+ * Tests verify scheduler.poll event payload is semantically consistent across scenarios.
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
@@ -22,31 +22,19 @@ describe("BUG-002: Scheduler Log/Event Mismatch (P2)", () => {
   let logger: EventLogger;
   let executor: MockExecutor;
   let events: BaseEvent[];
-  let consoleInfos: string[];
-  let consoleErrors: string[];
 
   beforeEach(async () => {
     tmpDir = await mkdtemp(join(tmpdir(), "bug002-log-test-"));
-    
+
     events = [];
     logger = new EventLogger(join(tmpDir, "events"), {
       onEvent: (event) => events.push(event),
     });
-    
+
     store = new FilesystemTaskStore(tmpDir, { logger });
     await store.init();
-    
-    executor = new MockExecutor();
 
-    // Capture console logs
-    consoleInfos = [];
-    consoleErrors = [];
-    vi.spyOn(console, "info").mockImplementation((...args) => {
-      consoleInfos.push(args.join(" "));
-    });
-    vi.spyOn(console, "error").mockImplementation((...args) => {
-      consoleErrors.push(args.join(" "));
-    });
+    executor = new MockExecutor();
   });
 
   afterEach(async () => {
@@ -54,8 +42,7 @@ describe("BUG-002: Scheduler Log/Event Mismatch (P2)", () => {
     await rm(tmpDir, { recursive: true, force: true });
   });
 
-  it("BUG-002: log shows dispatched count matching event actionsExecuted", async () => {
-    // Create 2 successful tasks
+  it("BUG-002: poll event actionsExecuted matches dispatch count", async () => {
     for (let i = 0; i < 2; i++) {
       const task = await store.create({
         title: `Task ${i + 1}`,
@@ -73,17 +60,13 @@ describe("BUG-002: Scheduler Log/Event Mismatch (P2)", () => {
       executor,
     });
 
-    // Check event
+    // ODD: assert on scheduler.poll event payload
     const pollEvent = events.find(e => e.type === "scheduler.poll");
     expect(pollEvent?.payload?.actionsExecuted).toBe(2);
-
-    // Check log
-    const pollLog = consoleInfos.find(msg => msg.includes("Scheduler poll"));
-    expect(pollLog).toContain("2 dispatched");
+    expect(pollEvent?.payload?.actionsFailed).toBe(0);
   });
 
-  it("BUG-002: log shows failed count matching event actionsFailed", async () => {
-    // Create 3 failing tasks
+  it("BUG-002: poll event actionsFailed matches failure count", async () => {
     for (let i = 0; i < 3; i++) {
       const task = await store.create({
         title: `Fail task ${i + 1}`,
@@ -103,13 +86,10 @@ describe("BUG-002: Scheduler Log/Event Mismatch (P2)", () => {
       executor,
     });
 
-    // Check event
+    // ODD: assert on event payload, not console text
     const pollEvent = events.find(e => e.type === "scheduler.poll");
     expect(pollEvent?.payload?.actionsFailed).toBe(3);
-
-    // Check log
-    const pollLog = consoleInfos.find(msg => msg.includes("Scheduler poll"));
-    expect(pollLog).toContain("3 failed");
+    expect(pollEvent?.payload?.actionsExecuted).toBe(0);
   });
 
   it("BUG-002: execution_failed reason only when failures exist", async () => {
@@ -134,10 +114,6 @@ describe("BUG-002: Scheduler Log/Event Mismatch (P2)", () => {
     const pollEvent = events.find(e => e.type === "scheduler.poll");
     expect(pollEvent?.payload?.reason).toBe("action_failed");
     expect(pollEvent?.payload?.actionsFailed).toBeGreaterThan(0);
-
-    // Log should mention failures
-    const errorLog = consoleErrors.find(msg => msg.includes("failed"));
-    expect(errorLog).toBeDefined();
   });
 
   it("BUG-002: no execution_failed when actions succeed", async () => {
@@ -156,7 +132,6 @@ describe("BUG-002: Scheduler Log/Event Mismatch (P2)", () => {
       executor,
     });
 
-    // Event should NOT have execution_failed reason
     const pollEvent = events.find(e => e.type === "scheduler.poll");
     expect(pollEvent?.payload?.reason).not.toBe("execution_failed");
     expect(pollEvent?.payload?.actionsExecuted).toBe(1);
@@ -164,7 +139,6 @@ describe("BUG-002: Scheduler Log/Event Mismatch (P2)", () => {
   });
 
   it("BUG-002: mixed success and failure counts consistent", async () => {
-    // Create 2 success + 1 failure
     const task1 = await store.create({
       title: "Success 1",
       body: "Body",
@@ -181,7 +155,6 @@ describe("BUG-002: Scheduler Log/Event Mismatch (P2)", () => {
     });
     await store.transition(task2.frontmatter.id, "ready");
 
-    // Make one task fail by giving it an executor that fails
     const failExecutor = new MockExecutor();
     failExecutor.spawn = vi.fn().mockImplementation(async (context) => {
       if (context.agent === "agent-2") {
@@ -197,19 +170,14 @@ describe("BUG-002: Scheduler Log/Event Mismatch (P2)", () => {
       executor: failExecutor,
     });
 
-    // Event counts
+    // ODD: event payload is the single source of truth
     const pollEvent = events.find(e => e.type === "scheduler.poll");
     expect(pollEvent?.payload?.actionsPlanned).toBe(2);
     expect(pollEvent?.payload?.actionsExecuted).toBe(1);
     expect(pollEvent?.payload?.actionsFailed).toBe(1);
-
-    // Log counts
-    const pollLog = consoleInfos.find(msg => msg.includes("Scheduler poll"));
-    expect(pollLog).toContain("1 dispatched");
-    expect(pollLog).toContain("1 failed");
   });
 
-  it("BUG-002: dry-run mode log/event consistency", async () => {
+  it("BUG-002: dry-run mode event consistency", async () => {
     const task = await store.create({
       title: "Dry run task",
       body: "Body",
@@ -225,20 +193,15 @@ describe("BUG-002: Scheduler Log/Event Mismatch (P2)", () => {
       executor,
     });
 
-    // Event should show dry run
+    // ODD: scheduler.poll event records dry-run state
     const pollEvent = events.find(e => e.type === "scheduler.poll");
     expect(pollEvent?.payload?.dryRun).toBe(true);
     expect(pollEvent?.payload?.actionsPlanned).toBe(1);
     expect(pollEvent?.payload?.actionsExecuted).toBe(0);
     expect(pollEvent?.payload?.reason).toBe("dry_run_mode");
-
-    // Log should show DRY RUN
-    const pollLog = consoleInfos.find(msg => msg.includes("Scheduler poll"));
-    expect(pollLog).toContain("DRY RUN");
-    expect(pollLog).toContain("1 actions planned");
   });
 
-  it("BUG-002: failure reason appears in log when present", async () => {
+  it("BUG-002: failure reason recorded in poll event", async () => {
     const task = await store.create({
       title: "Test task",
       body: "Body",
@@ -259,16 +222,11 @@ describe("BUG-002: Scheduler Log/Event Mismatch (P2)", () => {
     // BUG-TELEMETRY-001: Reason should be "action_failed" not "execution_failed"
     const pollEvent = events.find(e => e.type === "scheduler.poll");
     expect(pollEvent?.payload?.reason).toBe("action_failed");
-
-    // Log mentions failures
-    const hasFailureLog = consoleErrors.some(msg => 
-      msg.includes("failed") || msg.includes("failure")
-    );
-    expect(hasFailureLog).toBe(true);
+    expect(pollEvent?.payload?.actionsFailed).toBeGreaterThan(0);
   });
 
-  it("BUG-002: acceptance - log and event are semantically consistent", async () => {
-    // Create mixed workload: 2 success, 1 failure
+  it("BUG-002: acceptance - event payload is consistent across mixed workloads", async () => {
+    // 2 success, 1 failure
     for (let i = 0; i < 2; i++) {
       const task = await store.create({
         title: `Success ${i + 1}`,
@@ -287,7 +245,6 @@ describe("BUG-002: Scheduler Log/Event Mismatch (P2)", () => {
     });
     await store.transition(failTask.frontmatter.id, "ready");
 
-    // Custom executor that fails for fail-agent
     const customExecutor = new MockExecutor();
     customExecutor.spawn = vi.fn().mockImplementation(async (context) => {
       if (context.agent === "fail-agent") {
@@ -303,18 +260,15 @@ describe("BUG-002: Scheduler Log/Event Mismatch (P2)", () => {
       executor: customExecutor,
     });
 
-    // Event payload
+    // ODD: assert on event payload
     const pollEvent = events.find(e => e.type === "scheduler.poll");
     expect(pollEvent?.payload?.actionsPlanned).toBe(3);
     expect(pollEvent?.payload?.actionsExecuted).toBe(2);
     expect(pollEvent?.payload?.actionsFailed).toBe(1);
 
-    // Log output
-    const pollLog = consoleInfos.find(msg => msg.includes("Scheduler poll"));
-    expect(pollLog).toContain("2 dispatched");
-    expect(pollLog).toContain("1 failed");
-
-    // Failure counts match between log and event
-    expect(pollEvent?.payload?.actionsFailed).toBe(1);
+    // dispatch.error event for the failed task
+    const errorEvents = events.filter(e => e.type === "dispatch.error");
+    expect(errorEvents.length).toBe(1);
+    expect(errorEvents[0]?.payload?.error).toContain("unavailable");
   });
 });

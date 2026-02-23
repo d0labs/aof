@@ -1,8 +1,8 @@
 /**
  * BUG-003: No Error Propagation in Executor (P0)
  * Date: 2026-02-08 19:16 EST
- * 
- * Tests verify executor errors are properly logged with actionable context.
+ *
+ * Tests verify executor errors produce dispatch.error events with actionable context.
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
@@ -22,27 +22,19 @@ describe("BUG-003: No Error Propagation in Executor (P0)", () => {
   let logger: EventLogger;
   let executor: MockExecutor;
   let events: BaseEvent[];
-  let consoleErrors: string[];
 
   beforeEach(async () => {
     tmpDir = await mkdtemp(join(tmpdir(), "bug003-err-test-"));
-    
+
     events = [];
     logger = new EventLogger(join(tmpDir, "events"), {
       onEvent: (event) => events.push(event),
     });
-    
+
     store = new FilesystemTaskStore(tmpDir, { logger });
     await store.init();
-    
-    executor = new MockExecutor();
 
-    // Capture console.error
-    consoleErrors = [];
-    vi.spyOn(console, "error").mockImplementation((...args) => {
-      consoleErrors.push(args.join(" "));
-    });
-    vi.spyOn(console, "info").mockImplementation(() => {}); // Suppress info logs
+    executor = new MockExecutor();
   });
 
   afterEach(async () => {
@@ -50,7 +42,7 @@ describe("BUG-003: No Error Propagation in Executor (P0)", () => {
     await rm(tmpDir, { recursive: true, force: true });
   });
 
-  it("BUG-003: executor spawn failure produces ERROR log", async () => {
+  it("BUG-003: executor spawn failure produces dispatch.error event", async () => {
     const task = await store.create({
       title: "Failing task",
       body: "Body",
@@ -68,15 +60,13 @@ describe("BUG-003: No Error Propagation in Executor (P0)", () => {
       executor,
     });
 
-    // Verify ERROR log exists
-    const hasError = consoleErrors.some(msg => 
-      msg.includes("Scheduler dispatch failures") || 
-      msg.toLowerCase().includes("failed")
-    );
-    expect(hasError).toBe(true);
+    // ODD: dispatch.error event is the observable signal of failure
+    const errorEvent = events.find(e => e.type === "dispatch.error");
+    expect(errorEvent).toBeDefined();
+    expect(errorEvent?.taskId).toBe(task.frontmatter.id);
   });
 
-  it("BUG-003: ERROR log includes actionable context", async () => {
+  it("BUG-003: dispatch.error event includes actionable context", async () => {
     const task = await store.create({
       title: "Test task",
       body: "Body",
@@ -94,11 +84,14 @@ describe("BUG-003: No Error Propagation in Executor (P0)", () => {
       executor,
     });
 
-    // Error should include count and reference to details
-    const errorLog = consoleErrors.find(msg => msg.includes("failed to spawn"));
-    expect(errorLog).toBeDefined();
-    expect(errorLog).toContain("1");
-    expect(errorLog).toContain("events.jsonl");
+    // ODD: error details are in the event payload, not console text
+    const errorEvent = events.find(e => e.type === "dispatch.error");
+    expect(errorEvent).toBeDefined();
+    expect(errorEvent?.taskId).toBe(task.frontmatter.id);
+    expect(errorEvent?.payload?.error).toContain("timeout");
+
+    const pollEvent = events.find(e => e.type === "scheduler.poll");
+    expect(pollEvent?.payload?.actionsFailed).toBe(1);
   });
 
   it("BUG-003: error event includes error message", async () => {
@@ -119,14 +112,13 @@ describe("BUG-003: No Error Propagation in Executor (P0)", () => {
       executor,
     });
 
-    // Verify error event has message
     const errorEvent = events.find(e => e.type === "dispatch.error");
     expect(errorEvent).toBeDefined();
     expect(errorEvent?.taskId).toBe(task.frontmatter.id);
     expect(errorEvent?.payload?.error).toContain("timeout");
   });
 
-  it("BUG-003: executor exception produces ERROR log", async () => {
+  it("BUG-003: executor exception produces dispatch.error event", async () => {
     const task = await store.create({
       title: "Exception task",
       body: "Body",
@@ -144,10 +136,10 @@ describe("BUG-003: No Error Propagation in Executor (P0)", () => {
       executor,
     });
 
-    // Should have error log
-    expect(consoleErrors.length).toBeGreaterThan(0);
-    const hasError = consoleErrors.some(msg => msg.includes("failed"));
-    expect(hasError).toBe(true);
+    // ODD: exception is captured in dispatch.error event
+    const errorEvent = events.find(e => e.type === "dispatch.error");
+    expect(errorEvent).toBeDefined();
+    expect(errorEvent?.taskId).toBe(task.frontmatter.id);
   });
 
   it("BUG-003: exception error includes stack/message in event", async () => {
@@ -168,7 +160,6 @@ describe("BUG-003: No Error Propagation in Executor (P0)", () => {
       executor,
     });
 
-    // Error event should include exception details
     const errorEvent = events.find(e => e.type === "dispatch.error");
     expect(errorEvent).toBeDefined();
     expect(errorEvent?.payload?.error).toContain("exception");
@@ -192,15 +183,13 @@ describe("BUG-003: No Error Propagation in Executor (P0)", () => {
       executor,
     });
 
-    // action.completed should have success: false and error
     const completedEvent = events.find(e => e.type === "action.completed");
     expect(completedEvent).toBeDefined();
     expect(completedEvent?.payload?.success).toBe(false);
     expect(completedEvent?.payload?.error).toBeDefined();
   });
 
-  it("BUG-003: multiple failures logged independently", async () => {
-    // Create 3 tasks that will fail
+  it("BUG-003: multiple failures each produce independent dispatch.error events", async () => {
     const tasks = [];
     for (let i = 0; i < 3; i++) {
       const task = await store.create({
@@ -222,20 +211,15 @@ describe("BUG-003: No Error Propagation in Executor (P0)", () => {
       executor,
     });
 
-    // Should have error events for each task
+    // ODD: one dispatch.error per failing task
     const errorEvents = events.filter(e => e.type === "dispatch.error");
     expect(errorEvents.length).toBe(3);
 
-    // Should have actionsFailed = 3
     const pollEvent = events.find(e => e.type === "scheduler.poll");
     expect(pollEvent?.payload?.actionsFailed).toBe(3);
-
-    // Console error should mention count
-    const errorLog = consoleErrors.find(msg => msg.includes("3"));
-    expect(errorLog).toBeDefined();
   });
 
-  it("BUG-003: acceptance - ERROR log with actionable context", async () => {
+  it("BUG-003: acceptance - dispatch.error event with actionable context", async () => {
     const task = await store.create({
       title: "Acceptance test",
       body: "Body",
@@ -253,14 +237,7 @@ describe("BUG-003: No Error Propagation in Executor (P0)", () => {
       executor,
     });
 
-    // Acceptance criteria:
-    // 1. Failed dispatch produces ERROR log with actionable context
-    const hasErrorLog = consoleErrors.some(msg => 
-      msg.includes("failed") && msg.includes("events.jsonl")
-    );
-    expect(hasErrorLog).toBe(true);
-
-    // 2. Event log includes error metadata
+    // ODD acceptance criteria: dispatch.error event with task ID and error details
     const errorEvent = events.find(e => e.type === "dispatch.error");
     expect(errorEvent).toBeDefined();
     expect(errorEvent?.taskId).toBe(task.frontmatter.id);
