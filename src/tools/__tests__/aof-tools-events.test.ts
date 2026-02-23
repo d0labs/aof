@@ -12,6 +12,7 @@ import { FilesystemTaskStore } from "../../store/task-store.js";
 import type { ITaskStore } from "../../store/interfaces.js";
 import { EventLogger } from "../../events/logger.js";
 import { aofDispatch, aofTaskUpdate, aofTaskComplete } from "../aof-tools.js";
+import { readTasksInDir } from "../../testing/task-reader.js";
 import type { BaseEvent } from "../../schemas/event.js";
 
 describe("BUG-002: AOF tool event emission", () => {
@@ -171,5 +172,76 @@ describe("BUG-002: AOF tool event emission", () => {
 
     // No events should be captured
     expect(capturedEvents).toHaveLength(0);
+  });
+
+  it("ODD filesystem: task in ready dir after aofDispatch", async () => {
+    const result = await aofDispatch(
+      { store, logger },
+      { title: "FS Test Task", brief: "ODD filesystem check", actor: "test-actor" }
+    );
+
+    // ODD: filesystem state — task exists in tasks/ready/
+    const readyTasks = await readTasksInDir(join(tmpDir, "tasks", "ready"));
+    const found = readyTasks.find(t => t.frontmatter.id === result.taskId);
+    expect(found).toBeDefined();
+    expect(found?.frontmatter.status).toBe("ready");
+  });
+
+  it("ODD filesystem: task in in-progress dir after aofTaskUpdate", async () => {
+    const { taskId } = await aofDispatch(
+      { store, logger },
+      { title: "FS Update Task", brief: "ODD update check", actor: "test-actor" }
+    );
+    capturedEvents.length = 0;
+
+    await aofTaskUpdate({ store, logger }, { taskId, status: "in-progress", actor: "test-actor" });
+
+    // ODD: filesystem state — task moved to tasks/in-progress/
+    const inProgressTasks = await readTasksInDir(join(tmpDir, "tasks", "in-progress"));
+    const found = inProgressTasks.find(t => t.frontmatter.id === taskId);
+    expect(found).toBeDefined();
+    expect(found?.frontmatter.status).toBe("in-progress");
+  });
+
+  it("ODD filesystem: task in done dir after aofTaskComplete", async () => {
+    const { taskId } = await aofDispatch(
+      { store, logger },
+      { title: "FS Complete Task", brief: "ODD complete check", actor: "test-actor" }
+    );
+    await store.transition(taskId, "in-progress");
+    await store.transition(taskId, "review");
+    capturedEvents.length = 0;
+
+    await aofTaskComplete(
+      { store, logger },
+      { taskId, actor: "test-actor", summary: "All done" }
+    );
+
+    // ODD: filesystem state — task in tasks/done/
+    const doneTasks = await readTasksInDir(join(tmpDir, "tasks", "done"));
+    const found = doneTasks.find(t => t.frontmatter.id === taskId);
+    expect(found).toBeDefined();
+    expect(found?.frontmatter.status).toBe("done");
+  });
+
+  it("ODD event+filesystem: aofDispatch with routing persists agent metadata", async () => {
+    const result = await aofDispatch(
+      { store, logger },
+      {
+        title: "Routed Task",
+        brief: "Route to specific agent",
+        actor: "test-actor",
+        agent: "swe-backend",
+      }
+    );
+
+    // ODD event: task.created event carries routing
+    const createdEvent = capturedEvents.find(e => e.type === "task.created");
+    expect(createdEvent?.taskId).toBe(result.taskId);
+
+    // ODD filesystem: task file has correct routing
+    const readyTasks = await readTasksInDir(join(tmpDir, "tasks", "ready"));
+    const task = readyTasks.find(t => t.frontmatter.id === result.taskId);
+    expect(task?.frontmatter.routing?.agent).toBe("swe-backend");
   });
 });

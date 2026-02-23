@@ -8,7 +8,7 @@
  * - Events are logged for deadletter transitions
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdtemp, rm, mkdir, writeFile, readFile, readdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -17,25 +17,29 @@ import type { ITaskStore } from "../../store/interfaces.js";
 import { EventLogger } from "../../events/logger.js";
 import { trackDispatchFailure, shouldTransitionToDeadletter, transitionToDeadletter } from "../failure-tracker.js";
 import type { Task } from "../../schemas/task.js";
+import type { BaseEvent } from "../../schemas/event.js";
 
 describe("Dispatch Failure Tracking", () => {
   let testDir: string;
   let store: ITaskStore;
   let eventLogger: EventLogger;
+  let capturedEvents: BaseEvent[];
 
   beforeEach(async () => {
     // Create temporary directory for test
     testDir = await mkdtemp(join(tmpdir(), "aof-deadletter-test-"));
-    
+
     // Create required directories
     await mkdir(join(testDir, "tasks", "ready"), { recursive: true });
     await mkdir(join(testDir, "tasks", "deadletter"), { recursive: true });
     await mkdir(join(testDir, "events"), { recursive: true });
-    
-    // Initialize store and event logger
-    // TaskStore expects projectRoot (parent of tasks/), not tasks/ itself
+
+    // Initialize store and event logger with in-memory capture
+    capturedEvents = [];
     store = new FilesystemTaskStore(testDir, { projectId: "test" });
-    eventLogger = new EventLogger(join(testDir, "events"));
+    eventLogger = new EventLogger(join(testDir, "events"), {
+      onEvent: (event) => capturedEvents.push(event),
+    });
   });
 
   afterEach(async () => {
@@ -161,7 +165,7 @@ Test task body`;
     expect(task?.frontmatter.status).toBe("deadletter");
   });
 
-  it("transitionToDeadletter emits ops alert", async () => {
+  it("transitionToDeadletter emits task.deadletter event with ops context", async () => {
     const taskId = "TASK-2026-02-13-006";
     const taskContent = `---
 schemaVersion: 1
@@ -185,20 +189,20 @@ Test task body`;
 
     await writeFile(join(testDir, "tasks", "ready", `${taskId}.md`), taskContent);
 
-    // Mock console.error to capture alert
-    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
-
     // Transition to deadletter
     await transitionToDeadletter(store, eventLogger, taskId, "test failure 3");
 
-    // Verify alert was emitted
-    expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining("[AOF] DEADLETTER:"));
-    expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining(`Task ${taskId}`));
-    expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining("Failure count: 3"));
-    expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining("test failure 3"));
-    expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining("Agent: swe-backend"));
+    // ODD: assert on task.deadletter event, not console.error text
+    const deadletterEvent = capturedEvents.find(e => e.type === "task.deadletter");
+    expect(deadletterEvent).toBeDefined();
+    expect(deadletterEvent?.taskId).toBe(taskId);
+    expect(deadletterEvent?.payload.reason).toBe("max_dispatch_failures");
+    expect(deadletterEvent?.payload.failureCount).toBe(3);
+    expect(deadletterEvent?.payload.lastFailureReason).toBe("test failure 3");
 
-    errorSpy.mockRestore();
+    // Filesystem state: task is in deadletter directory
+    const deadletterFiles = await readdir(join(testDir, "tasks", "deadletter"));
+    expect(deadletterFiles).toContain(`${taskId}.md`);
   });
 
   it("transitionToDeadletter logs event", async () => {

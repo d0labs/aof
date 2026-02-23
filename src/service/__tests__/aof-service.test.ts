@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { mkdtemp, rm, mkdir } from "node:fs/promises";
+import { mkdtemp, rm, mkdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { FilesystemTaskStore } from "../../store/task-store.js";
@@ -8,7 +8,10 @@ import { EventLogger } from "../../events/logger.js";
 import { MockNotificationAdapter } from "../../events/notifier.js";
 import { NotificationPolicyEngine, DEFAULT_RULES } from "../../events/notification-policy/index.js";
 import { AOFService } from "../aof-service.js";
+import { AOFMetrics } from "../../metrics/exporter.js";
+import { getMetricValue } from "../../testing/metrics-reader.js";
 import type { PollResult } from "../../dispatch/scheduler.js";
+import type { BaseEvent } from "../../schemas/event.js";
 
 describe("AOFService", () => {
   let tmpDir: string;
@@ -189,5 +192,83 @@ describe("AOFService", () => {
     expect(transitionNotifications.length).toBeGreaterThan(0);
 
     await service.stop();
+  });
+
+  it("ODD: emits system.startup event to EventLogger on start", async () => {
+    const capturedEvents: BaseEvent[] = [];
+    const eventLogger = new EventLogger(join(tmpDir, "events"), {
+      onEvent: (event) => capturedEvents.push(event),
+    });
+    const poller = vi.fn(async () => makePollResult());
+    const service = new AOFService(
+      { store, logger: eventLogger, poller },
+      { dataDir: tmpDir, pollIntervalMs: 60_000, dryRun: true },
+    );
+
+    await service.start();
+
+    // ODD: event log contains system.startup
+    const startupEvent = capturedEvents.find(e => e.type === "system.startup");
+    expect(startupEvent).toBeDefined();
+
+    await service.stop();
+  });
+
+  it("ODD: events.jsonl written to filesystem after start", async () => {
+    const poller = vi.fn(async () => makePollResult());
+    const service = new AOFService(
+      { store, logger, poller },
+      { dataDir: tmpDir, pollIntervalMs: 60_000, dryRun: true },
+    );
+
+    await service.start();
+
+    // ODD: filesystem state — events.jsonl exists and contains startup event
+    const eventsPath = join(tmpDir, "events", "events.jsonl");
+    const eventsRaw = await readFile(eventsPath, "utf-8");
+    const events = eventsRaw.trim().split("\n").map(l => JSON.parse(l));
+    expect(events.some((e: { type: string }) => e.type === "system.startup")).toBe(true);
+
+    await service.stop();
+  });
+
+  it("ODD: aof_scheduler_poll_failures_total increments on poll error", async () => {
+    const metrics = new AOFMetrics();
+    const failingPoller = vi.fn(async (): Promise<PollResult> => {
+      throw new Error("Simulated poll failure");
+    });
+    const service = new AOFService(
+      { store, logger, poller: failingPoller, metrics },
+      { dataDir: tmpDir, pollIntervalMs: 60_000, dryRun: true },
+    );
+
+    await service.start();
+
+    // ODD: metric counter incremented after poll error
+    const failures = await getMetricValue(metrics, "aof_scheduler_poll_failures_total");
+    expect(failures).toBeGreaterThanOrEqual(1);
+
+    await service.stop();
+  });
+
+  it("ODD: getStatus reflects poll results after start", async () => {
+    const poller = vi.fn(async () => makePollResult());
+    const service = new AOFService(
+      { store, logger, poller },
+      { dataDir: tmpDir, pollIntervalMs: 60_000, dryRun: true },
+    );
+
+    await service.start();
+
+    // ODD: observable state via getStatus — lastPollAt updated after poll
+    const status = service.getStatus();
+    expect(status.running).toBe(true);
+    expect(status.lastPollAt).toBeDefined();
+    expect(new Date(status.lastPollAt!).getTime()).toBeLessThanOrEqual(Date.now());
+
+    await service.stop();
+
+    // ODD: after stop, running is false
+    expect(service.getStatus().running).toBe(false);
   });
 });

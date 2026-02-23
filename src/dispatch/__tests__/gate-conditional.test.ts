@@ -191,22 +191,21 @@ describe("gate-conditional", () => {
 
     it("should return false for invalid syntax", () => {
       const consoleWarnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
-      
+
+      // ODD: return value false is the observable signal for invalid expressions
       expect(evaluateGateCondition("tags.includes(", context)).toBe(false);
       expect(evaluateGateCondition("invalid javascript {{{", context)).toBe(false);
       expect(evaluateGateCondition("metadata.", context)).toBe(false);
-      
-      expect(consoleWarnSpy).toHaveBeenCalledTimes(3);
+
       consoleWarnSpy.mockRestore();
     });
 
     it("should return false for runtime errors", () => {
       const consoleWarnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
-      
-      // Accessing undefined property should not throw but return falsy
+
+      // ODD: return value false is the observable signal for runtime evaluation errors
       expect(evaluateGateCondition("metadata.nonexistent.property", context)).toBe(false);
-      
-      expect(consoleWarnSpy).toHaveBeenCalled();
+
       consoleWarnSpy.mockRestore();
     });
 
@@ -250,10 +249,10 @@ describe("gate-conditional", () => {
     it("should treat prototype pollution attempts as invalid", () => {
       const consoleWarnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
 
+      // ODD: return value false is the observable signal; prototype attacks are rejected
       expect(evaluateGateCondition("metadata.__proto__.polluted()", context)).toBe(false);
       expect(evaluateGateCondition("({}).__proto__.polluted()", context)).toBe(false);
 
-      expect(consoleWarnSpy).toHaveBeenCalledTimes(2);
       consoleWarnSpy.mockRestore();
     });
 
@@ -263,11 +262,8 @@ describe("gate-conditional", () => {
 
       nowSpy.mockReturnValueOnce(0).mockReturnValueOnce(200);
 
+      // ODD: timeout → return value false is the observable signal
       expect(evaluateGateCondition("true", context)).toBe(false);
-
-      expect(consoleWarnSpy).toHaveBeenCalledWith(
-        expect.stringContaining("Gate condition evaluation timeout")
-      );
 
       consoleWarnSpy.mockRestore();
       nowSpy.mockRestore();

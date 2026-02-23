@@ -25,11 +25,11 @@ describe("Deadletter Integration", () => {
 
   beforeEach(async () => {
     testDir = await mkdtemp(join(tmpdir(), "aof-integration-test-"));
-    
+
     await mkdir(join(testDir, "tasks", "ready"), { recursive: true });
     await mkdir(join(testDir, "tasks", "deadletter"), { recursive: true });
     await mkdir(join(testDir, "events"), { recursive: true });
-    
+
     eventLogger = new EventLogger(join(testDir, "events"));
     store = new FilesystemTaskStore(testDir, { projectId: "test", logger: eventLogger });
   });
@@ -102,5 +102,135 @@ Test task body`;
     // Check for transition events
     const transitionEvents = events.filter(e => e.type === "task.transitioned");
     expect(transitionEvents.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("threshold boundary: 2 failures do not trigger deadletter", async () => {
+    const taskId = "TASK-2026-02-13-010";
+    await writeFile(join(testDir, "tasks", "ready", `${taskId}.md`), `---
+schemaVersion: 1
+id: ${taskId}
+project: test
+title: Boundary Task
+status: ready
+priority: normal
+createdAt: 2026-02-13T00:00:00Z
+updatedAt: 2026-02-13T00:00:00Z
+lastTransitionAt: 2026-02-13T00:00:00Z
+createdBy: system
+metadata: {}
+---
+
+Task body`);
+
+    await trackDispatchFailure(store, taskId, "failure 1");
+    await trackDispatchFailure(store, taskId, "failure 2");
+
+    const task = await store.get(taskId);
+    // ODD: shouldTransitionToDeadletter is the observable gate — must be false at 2
+    expect(shouldTransitionToDeadletter(task!)).toBe(false);
+    expect(task?.frontmatter.metadata.dispatchFailures).toBe(2);
+    expect(task?.frontmatter.status).toBe("ready");
+  });
+
+  it("threshold boundary: exactly 3 failures triggers deadletter event", async () => {
+    const taskId = "TASK-2026-02-13-011";
+    await writeFile(join(testDir, "tasks", "ready", `${taskId}.md`), `---
+schemaVersion: 1
+id: ${taskId}
+project: test
+title: Exact Threshold Task
+status: ready
+priority: normal
+createdAt: 2026-02-13T00:00:00Z
+updatedAt: 2026-02-13T00:00:00Z
+lastTransitionAt: 2026-02-13T00:00:00Z
+createdBy: system
+metadata: {}
+---
+
+Task body`);
+
+    await trackDispatchFailure(store, taskId, "failure 1");
+    await trackDispatchFailure(store, taskId, "failure 2");
+    await trackDispatchFailure(store, taskId, "failure 3");
+
+    const task = await store.get(taskId);
+    expect(shouldTransitionToDeadletter(task!)).toBe(true);
+
+    await transitionToDeadletter(store, eventLogger, taskId, "failure 3");
+
+    // ODD event: task.deadletter with failureCount=3
+    const eventsLog = await readFile(join(testDir, "events", "events.jsonl"), "utf-8");
+    const events = eventsLog.trim().split("\n").map(l => JSON.parse(l));
+    const deadletterEvent = events.find(e => e.type === "task.deadletter");
+    expect(deadletterEvent?.payload.failureCount).toBe(3);
+    expect(deadletterEvent?.payload.lastFailureReason).toBe("failure 3");
+
+    // ODD filesystem: task is in deadletter dir
+    const dlTask = await store.get(taskId);
+    expect(dlTask?.frontmatter.status).toBe("deadletter");
+  });
+
+  it("ODD: failure reason recorded in metadata and event log", async () => {
+    const taskId = "TASK-2026-02-13-012";
+    await writeFile(join(testDir, "tasks", "ready", `${taskId}.md`), `---
+schemaVersion: 1
+id: ${taskId}
+project: test
+title: Reason Tracking Task
+status: ready
+priority: normal
+createdAt: 2026-02-13T00:00:00Z
+updatedAt: 2026-02-13T00:00:00Z
+lastTransitionAt: 2026-02-13T00:00:00Z
+createdBy: system
+metadata: {}
+---
+
+Task body`);
+
+    const specificReason = "Agent swe-backend timed out after 30s";
+    await trackDispatchFailure(store, taskId, specificReason);
+
+    const task = await store.get(taskId);
+    // ODD: failure reason persisted in task metadata
+    expect(task?.frontmatter.metadata.lastDispatchFailureReason).toBe(specificReason);
+    expect(task?.frontmatter.metadata.dispatchFailures).toBe(1);
+  });
+
+  it("resurrection resets failure counter and allows re-dispatch", async () => {
+    const taskId = "TASK-2026-02-13-013";
+    await writeFile(join(testDir, "tasks", "ready", `${taskId}.md`), `---
+schemaVersion: 1
+id: ${taskId}
+project: test
+title: Resurrection Counter Task
+status: ready
+priority: normal
+createdAt: 2026-02-13T00:00:00Z
+updatedAt: 2026-02-13T00:00:00Z
+lastTransitionAt: 2026-02-13T00:00:00Z
+createdBy: system
+metadata: {}
+---
+
+Task body`);
+
+    // Fail 3 times and deadletter
+    await trackDispatchFailure(store, taskId, "fail 1");
+    await trackDispatchFailure(store, taskId, "fail 2");
+    await trackDispatchFailure(store, taskId, "fail 3");
+    await transitionToDeadletter(store, eventLogger, taskId, "fail 3");
+
+    // Resurrect
+    await resurrectTask(store, eventLogger, taskId, "ops-team");
+
+    const task = await store.get(taskId);
+    // ODD: counter reset to 0 after resurrection
+    expect(task?.frontmatter.metadata.dispatchFailures).toBe(0);
+    expect(task?.frontmatter.status).toBe("ready");
+
+    // ODD: shouldTransitionToDeadletter is false again
+    expect(shouldTransitionToDeadletter(task!)).toBe(false);
   });
 });
