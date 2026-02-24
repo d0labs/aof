@@ -50,16 +50,31 @@ describe("FixtureAdapter", () => {
     await expect(adapter.getAgents()).rejects.toThrow();
   });
 
-  it("validates agent schema", async () => {
-    const fixturePath = join(tempDir, "invalid-schema.json");
+  it("validates agent schema — accepts partial agents with defaults", async () => {
+    const fixturePath = join(tempDir, "partial-schema.json");
+    // name/creature/active are optional; only id is required
     const fixtureData = [
-      { id: "agent:main:main" }, // Missing required fields
+      { id: "agent:main:main" },
     ];
     writeFileSync(fixturePath, JSON.stringify(fixtureData, null, 2));
 
     const adapter = new FixtureAdapter(fixturePath);
-    
-    await expect(adapter.getAgents()).rejects.toThrow(/required/i);
+    const agents = await adapter.getAgents();
+    expect(agents).toHaveLength(1);
+    expect(agents[0].id).toBe("agent:main:main");
+    expect(agents[0].name).toBe("Unknown");
+    expect(agents[0].active).toBe(true);
+  });
+
+  it("rejects agents missing id field", async () => {
+    const fixturePath = join(tempDir, "missing-id.json");
+    const fixtureData = [
+      { name: "No ID Agent" }, // Missing id — truly invalid
+    ];
+    writeFileSync(fixturePath, JSON.stringify(fixtureData, null, 2));
+
+    const adapter = new FixtureAdapter(fixturePath);
+    await expect(adapter.getAgents()).rejects.toThrow();
   });
 });
 

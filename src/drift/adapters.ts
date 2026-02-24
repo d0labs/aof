@@ -13,9 +13,9 @@ import type { OpenClawAgent } from "./detector.js";
 /** OpenClaw agent schema validator */
 const OpenClawAgentSchema = z.object({
   id: z.string(),
-  name: z.string(),
-  creature: z.string(),
-  active: z.boolean(),
+  name: z.string().optional().default("Unknown"),
+  creature: z.string().optional().default("agent"),
+  active: z.boolean().optional().default(true),
 });
 
 const OpenClawAgentsArraySchema = z.array(OpenClawAgentSchema);
@@ -66,7 +66,18 @@ export class LiveAdapter implements AgentAdapter {
         timeout: 5000, // 5 second timeout to prevent hanging
       });
 
-      const data = JSON.parse(output);
+      // Extract JSON part (handles config warnings printed to stdout before JSON)
+      const jsonStart = Math.min(
+        output.indexOf("[") === -1 ? Infinity : output.indexOf("["),
+        output.indexOf("{") === -1 ? Infinity : output.indexOf("{")
+      );
+      
+      if (jsonStart === Infinity) {
+        throw new Error("No JSON found in output");
+      }
+      
+      const cleanOutput = output.substring(jsonStart);
+      const data = JSON.parse(cleanOutput);
       
       // Validate schema
       const result = OpenClawAgentsArraySchema.safeParse(data);

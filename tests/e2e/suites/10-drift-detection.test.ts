@@ -508,12 +508,13 @@ describe("E2E: Drift Detection", () => {
       expect(agents[1].id).toBe("openclaw-agent-2");
     });
 
-    it("should validate fixture schema", async () => {
+    it("should validate fixture schema — rejects agents missing id", async () => {
       const fixturesDir = join(TEST_DATA_DIR, "fixtures");
       await mkdir(fixturesDir, { recursive: true });
 
       const fixturePath = join(fixturesDir, "invalid.json");
-      const invalidData = [{ id: "test", name: "Test" }]; // missing required fields
+      // Only id is required; name/creature/active default when absent
+      const invalidData = [{ name: "No ID Agent" }]; // missing required id field
 
       await writeFile(fixturePath, JSON.stringify(invalidData));
 
