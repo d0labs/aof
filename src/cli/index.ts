@@ -123,16 +123,16 @@ const scheduler = program
 scheduler
   .command("run")
   .description("Run one scheduler poll cycle")
-  .option("--active", "Active mode (mutate state)", false)
+  .option("--dry-run", "Dry-run mode (log only, no mutations)", false)
   .option("--project <id>", "Project ID", "_inbox")
-  .action(async (opts: { active: boolean; project: string }) => {
+  .action(async (opts: { dryRun: boolean; project: string }) => {
     const { createProjectStore } = await import("./project-utils.js");
     const root = program.opts()["root"] as string;
     const { store, projectRoot } = await createProjectStore({ projectId: opts.project, vaultRoot: root });
     const logger = new EventLogger(join(projectRoot, "events"));
     await store.init();
 
-    const dryRun = !opts.active;
+    const dryRun = opts.dryRun;
     console.log(`🔄 Scheduler poll (${dryRun ? "DRY RUN" : "ACTIVE"})...\n`);
 
     const result = await poll(store, logger, {

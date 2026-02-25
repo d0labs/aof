@@ -19,6 +19,8 @@ import { parse as parseYaml } from "yaml";
 import writeFileAtomic from "write-file-atomic";
 import { ProjectManifest } from "../schemas/project.js";
 import type { TaskContext } from "./executor.js";
+import { classifySpawnError } from "./scheduler-helpers.js";
+import { transitionToDeadletter } from "./failure-tracker.js";
 
 async function loadProjectManifest(
   store: ITaskStore,
@@ -215,12 +217,13 @@ export async function executeAssignAction(
         return { executed, failed };
       }
       
-      console.error(`[AOF] Spawn failed for ${action.taskId} (agent: ${action.agent}): ${result.error}`);
+      const errorClass = classifySpawnError(result.error ?? "unknown");
+      console.error(`[AOF] Spawn failed for ${action.taskId} (agent: ${action.agent}, class: ${errorClass}): ${result.error}`);
 
       // Track retry count and timestamp in metadata
       const currentTask = await store.get(action.taskId);
       const retryCount = ((currentTask?.frontmatter.metadata?.retryCount as number) ?? 0) + 1;
-      
+
       // Update metadata before transition
       if (currentTask) {
         currentTask.frontmatter.metadata = {
@@ -229,18 +232,24 @@ export async function executeAssignAction(
           lastBlockedAt: new Date().toISOString(),
           blockReason: `spawn_failed: ${result.error}`,
           lastError: result.error,
+          errorClass,
         };
-        
+
         // Write updated task with metadata before transition
         const serialized = serializeTask(currentTask);
         const taskPath = currentTask.path ?? join(store.tasksDir, currentTask.frontmatter.status, `${currentTask.frontmatter.id}.md`);
         await writeFileAtomic(taskPath, serialized);
       }
-      
-      // Spawn failed — move to blocked
-      await store.transition(action.taskId, "blocked", {
-        reason: `spawn_failed: ${result.error}`,
-      });
+
+      // Permanent errors → deadletter immediately
+      if (errorClass === "permanent") {
+        await transitionToDeadletter(store, logger, action.taskId, result.error ?? "permanent spawn error");
+      } else {
+        // Transient — move to blocked for backoff retry
+        await store.transition(action.taskId, "blocked", {
+          reason: `spawn_failed: ${result.error}`,
+        });
+      }
       
       try {
         await logger.logDispatch("dispatch.error", "scheduler", action.taskId, {

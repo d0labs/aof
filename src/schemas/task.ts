@@ -137,8 +137,8 @@ export type Task = z.infer<typeof Task>;
 export const VALID_TRANSITIONS: Record<TaskStatus, readonly TaskStatus[]> = {
   "backlog":     ["ready", "blocked", "cancelled"],
   "ready":       ["in-progress", "blocked", "deadletter", "cancelled"],
-  "in-progress": ["review", "ready", "blocked", "cancelled"],
-  "blocked":     ["ready", "cancelled"],
+  "in-progress": ["review", "ready", "blocked", "deadletter", "cancelled"],
+  "blocked":     ["ready", "deadletter", "cancelled"],
   "review":      ["done", "in-progress", "blocked", "cancelled"],
   "done":        [],
   "cancelled":   [],

@@ -60,6 +60,8 @@ export interface SchedulerConfig {
    * Default: false (opt-in — cascade-blocking can be heavy-handed in multi-parent scenarios).
    */
   cascadeBlocks?: boolean;
+  /** Maximum dispatch retries before deadletter (default: 3). */
+  maxDispatchRetries?: number;
 }
 
 export interface SchedulerAction {
@@ -262,7 +264,7 @@ export async function poll(
   actions.push(...dispatchActions);
 
   // 5. Check for blocked tasks that might be unblocked
-  const recoveryActions = checkBlockedTaskRecovery(allTasks, childrenByParent);
+  const recoveryActions = checkBlockedTaskRecovery(allTasks, childrenByParent, config.maxDispatchRetries);
   actions.push(...recoveryActions);
   // 6. Execute actions (only in active mode)
   const effectiveConcurrencyLimitRef = { value: effectiveConcurrencyLimit };

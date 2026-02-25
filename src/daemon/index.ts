@@ -12,9 +12,9 @@ const program = new Command()
   .description("AOF scheduler daemon (poll-only)")
   .option("--root <path>", "AOF root directory", AOF_ROOT)
   .option("--interval <ms>", "Poll interval in ms", "30000")
-  .option("--active", "Active mode (mutate state)", false);
+  .option("--dry-run", "Dry-run mode (log only, no mutations)", false);
 
-program.action(async (opts: { root: string; interval: string; active: boolean }) => {
+program.action(async (opts: { root: string; interval: string; dryRun: boolean }) => {
   const pollIntervalMs = Number(opts.interval);
   if (Number.isNaN(pollIntervalMs) || pollIntervalMs <= 0) {
     console.error("Invalid --interval (must be positive number)");
@@ -31,7 +31,7 @@ program.action(async (opts: { root: string; interval: string; active: boolean })
   const { service, healthServer } = await startAofDaemon({
     dataDir: opts.root,
     pollIntervalMs,
-    dryRun: !opts.active,
+    dryRun: opts.dryRun,
     enableHealthServer: true,
     healthPort,
     healthBind,

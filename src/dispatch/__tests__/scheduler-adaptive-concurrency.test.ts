@@ -242,22 +242,22 @@ describe("Scheduler - Adaptive Concurrency", () => {
     expect(updatedTask?.frontmatter.status).toBe("ready");
   });
 
-  it("should move to blocked for non-platform-limit errors", async () => {
-    const task = await store.create({
+  it("should deadletter permanent errors and block transient errors", async () => {
+    // Permanent error: "Agent not found" → deadletter immediately
+    const permTask = await store.create({
       createdBy: "test",
-      title: "Test Task",
+      title: "Permanent Error Task",
       description: "Test task",
       priority: "normal",
       routing: { agent: "agent:test:main" },
     });
-    await store.transition(task.frontmatter.id, "ready");
+    await store.transition(permTask.frontmatter.id, "ready");
 
-    const mockExecutor: DispatchExecutor = {
+    const permExecutor: DispatchExecutor = {
       async spawn(_context: TaskContext): Promise<ExecutorResult> {
         return {
           success: false,
           error: "Agent not found",
-          // No platformLimit
         };
       },
     };
@@ -266,16 +266,44 @@ describe("Scheduler - Adaptive Concurrency", () => {
       dataDir: tmpDir,
       dryRun: false,
       defaultLeaseTtlMs: 60000,
-      executor: mockExecutor,
+      executor: permExecutor,
       maxConcurrentDispatches: 3,
     });
 
-    // Task should be in blocked (normal error handling)
-    const tasks = await store.list();
-    const updatedTask = tasks.find(t => t.frontmatter.id === task.frontmatter.id);
-    expect(updatedTask?.frontmatter.status).toBe("blocked");
-    
-    // Should have retry count incremented
-    expect(updatedTask?.frontmatter.metadata?.retryCount).toBe(1);
+    const permTasks = await store.list();
+    const updatedPermTask = permTasks.find(t => t.frontmatter.id === permTask.frontmatter.id);
+    expect(updatedPermTask?.frontmatter.status).toBe("deadletter");
+
+    // Transient error: "gateway timeout" → blocked with retry
+    const transTask = await store.create({
+      createdBy: "test",
+      title: "Transient Error Task",
+      description: "Test task",
+      priority: "normal",
+      routing: { agent: "agent:test:main" },
+    });
+    await store.transition(transTask.frontmatter.id, "ready");
+
+    const transExecutor: DispatchExecutor = {
+      async spawn(_context: TaskContext): Promise<ExecutorResult> {
+        return {
+          success: false,
+          error: "gateway timeout",
+        };
+      },
+    };
+
+    await poll(store, logger, {
+      dataDir: tmpDir,
+      dryRun: false,
+      defaultLeaseTtlMs: 60000,
+      executor: transExecutor,
+      maxConcurrentDispatches: 3,
+    });
+
+    const transTasks = await store.list();
+    const updatedTransTask = transTasks.find(t => t.frontmatter.id === transTask.frontmatter.id);
+    expect(updatedTransTask?.frontmatter.status).toBe("blocked");
+    expect(updatedTransTask?.frontmatter.metadata?.retryCount).toBe(1);
   });
 });

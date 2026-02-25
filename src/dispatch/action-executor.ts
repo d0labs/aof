@@ -16,6 +16,8 @@ import { executeAssignAction } from "./assign-executor.js";
 import { markRunArtifactExpired, readRunResult } from "../recovery/run-artifacts.js";
 import { resolveCompletionTransitions } from "../protocol/completion-utils.js";
 import { cascadeOnCompletion } from "./dep-cascader.js";
+import { shouldAllowSpawnFailedRequeue, DEFAULT_MAX_DISPATCH_RETRIES } from "./scheduler-helpers.js";
+import { transitionToDeadletter } from "./failure-tracker.js";
 
 export interface ActionExecutionStats {
   actionsExecuted: number;
@@ -72,29 +74,60 @@ export async function executeActions(
               const taskPath = expiringTask.path ?? join(store.tasksDir, expiringTask.frontmatter.status, `${expiringTask.frontmatter.id}.md`);
               await writeFileAtomic(taskPath, serialized);
 
-              // BUG-AUDIT-002: For blocked tasks, check dependencies before requeueing
+              // BUG-AUDIT-002: For blocked tasks, check spawn failure + dependencies before requeueing
               if (expiringTask.frontmatter.status === "blocked") {
-                const deps = expiringTask.frontmatter.dependsOn ?? [];
-                const allDepsResolved = deps.length === 0 || deps.every(depId => {
-                  const dep = allTasks.find(t => t.frontmatter.id === depId);
-                  return dep?.frontmatter.status === "done";
-                });
+                const blockReason = expiringTask.frontmatter.metadata?.blockReason as string | undefined;
+                const isSpawnFailed = blockReason?.includes("spawn_failed") ?? false;
 
-                if (allDepsResolved) {
-                  // Dependencies satisfied - can requeue to ready
-                  await store.transition(action.taskId, "ready", {
-                    reason: "lease_expired_requeue"
-                  });
+                if (isSpawnFailed) {
+                  // Spawn-failed task: use shared guard to prevent infinite retry loop
+                  const maxRetries = config.maxDispatchRetries ?? DEFAULT_MAX_DISPATCH_RETRIES;
+                  const guard = shouldAllowSpawnFailedRequeue(expiringTask, maxRetries);
 
-                  try {
-                    await logger.logTransition(action.taskId, "blocked", "ready", "scheduler",
-                      `Lease expired and dependencies satisfied - requeued`);
-                  } catch {
-                    // Logging errors should not crash the scheduler
+                  if (guard.shouldDeadletter) {
+                    const lastError = (expiringTask.frontmatter.metadata?.lastError as string) ?? blockReason ?? "unknown";
+                    await transitionToDeadletter(store, logger, action.taskId, lastError);
+                    try {
+                      await logger.logTransition(action.taskId, "blocked", "deadletter", "scheduler",
+                        `Lease expired on spawn-failed task — ${guard.reason}`);
+                    } catch {
+                      // Logging errors should not crash the scheduler
+                    }
+                  } else if (guard.allow) {
+                    await store.transition(action.taskId, "ready", {
+                      reason: "lease_expired_spawn_retry"
+                    });
+                    try {
+                      await logger.logTransition(action.taskId, "blocked", "ready", "scheduler",
+                        `Lease expired — ${guard.reason}`);
+                    } catch {
+                      // Logging errors should not crash the scheduler
+                    }
+                  } else {
+                    // Backoff not elapsed — stay blocked, just clear the lease
+                    console.info(`[AOF] Lease expired on spawn-failed task ${action.taskId} — backoff pending (${guard.reason})`);
                   }
                 } else {
-                  // Dependencies not satisfied - just log lease expiry, stay blocked
-                  console.warn(`[AOF] Lease expired on blocked task ${action.taskId} but dependencies not satisfied - staying blocked`);
+                  // Non-spawn-failure blocked task: check dependencies
+                  const deps = expiringTask.frontmatter.dependsOn ?? [];
+                  const allDepsResolved = deps.length === 0 || deps.every(depId => {
+                    const dep = allTasks.find(t => t.frontmatter.id === depId);
+                    return dep?.frontmatter.status === "done";
+                  });
+
+                  if (allDepsResolved) {
+                    await store.transition(action.taskId, "ready", {
+                      reason: "lease_expired_requeue"
+                    });
+                    try {
+                      await logger.logTransition(action.taskId, "blocked", "ready", "scheduler",
+                        `Lease expired and dependencies satisfied - requeued`);
+                    } catch {
+                      // Logging errors should not crash the scheduler
+                    }
+                  } else {
+                    console.warn(`[AOF] Lease expired on blocked task ${action.taskId} but dependencies not satisfied - staying blocked`);
+                  }
                 }
               } else {
                 // In-progress task - transition back to ready
@@ -219,6 +252,13 @@ export async function executeActions(
             executed = result.executed;
             failed = result.failed;
             break;
+
+          case "deadletter": {
+            const lastError = action.reason ?? "unknown";
+            await transitionToDeadletter(store, logger, action.taskId, lastError);
+            // executed remains false — deadletter is not a dispatch
+            break;
+          }
 
           case "alert":
             // Alerts are logged but not executed (notification target)

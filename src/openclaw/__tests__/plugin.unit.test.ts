@@ -108,7 +108,7 @@ describe("AOF OpenClaw plugin entrypoint", () => {
       dataDir: DEFAULT_DATA_DIR,
       pollIntervalMs: 30_000,
       defaultLeaseTtlMs: 300_000,
-      dryRun: true,
+      dryRun: false,
     });
   });
 

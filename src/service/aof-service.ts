@@ -106,7 +106,7 @@ export class AOFService {
     
     this.schedulerConfig = {
       dataDir: config.dataDir,
-      dryRun: config.dryRun ?? true,
+      dryRun: config.dryRun ?? false,
       defaultLeaseTtlMs: config.defaultLeaseTtlMs ?? 600_000,
       executor: deps.executor,
       maxConcurrentDispatches: config.maxConcurrentDispatches,

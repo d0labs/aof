@@ -127,55 +127,132 @@ export function checkBacklogPromotion(
   return actions;
 }
 
+/** Default maximum dispatch retries before deadletter. */
+export const DEFAULT_MAX_DISPATCH_RETRIES = 3;
+
+/** Patterns that indicate permanent (non-retryable) spawn errors. */
+const PERMANENT_ERROR_PATTERNS = [
+  "agent not found",
+  "agent_not_found",
+  "no such agent",
+  "agent deregistered",
+  "permission denied",
+  "forbidden",
+  "unauthorized",
+];
+
+/**
+ * Classify a spawn error as transient or permanent.
+ * Permanent errors should deadletter immediately (no retry).
+ */
+export function classifySpawnError(error: string): "transient" | "permanent" {
+  const lower = error.toLowerCase();
+  for (const pattern of PERMANENT_ERROR_PATTERNS) {
+    if (lower.includes(pattern)) return "permanent";
+  }
+  return "transient";
+}
+
+/**
+ * Compute exponential backoff delay for spawn failure retries.
+ * Formula: min(60s * 3^retryCount, 15min)
+ * Gives: 60s, 180s, 540s, 900s, 900s, ...
+ */
+export function computeRetryBackoffMs(retryCount: number): number {
+  const baseMs = 60_000; // 1 minute
+  const ceilingMs = 15 * 60_000; // 15 minutes
+  return Math.min(baseMs * Math.pow(3, retryCount), ceilingMs);
+}
+
+/**
+ * Shared guard: should a spawn-failed task be requeued for retry?
+ * Used by both checkBlockedTaskRecovery and the lease-expiry handler.
+ */
+export function shouldAllowSpawnFailedRequeue(
+  task: Task,
+  maxRetries: number
+): { allow: boolean; reason?: string; shouldDeadletter?: boolean } {
+  const retryCount = (task.frontmatter.metadata?.retryCount as number) ?? 0;
+  const lastBlockedAt = task.frontmatter.metadata?.lastBlockedAt as string | undefined;
+  const errorClass = task.frontmatter.metadata?.errorClass as string | undefined;
+
+  // Permanent errors should never be retried
+  if (errorClass === "permanent") {
+    return {
+      allow: false,
+      reason: `Permanent error — deadletter immediately`,
+      shouldDeadletter: true,
+    };
+  }
+
+  // Max retries exceeded → deadletter
+  if (retryCount >= maxRetries) {
+    return {
+      allow: false,
+      reason: `Max retries (${maxRetries}) exceeded`,
+      shouldDeadletter: true,
+    };
+  }
+
+  // Check backoff timing
+  if (lastBlockedAt) {
+    const blockedAge = Date.now() - new Date(lastBlockedAt).getTime();
+    const requiredBackoff = computeRetryBackoffMs(retryCount);
+    if (blockedAge < requiredBackoff) {
+      return {
+        allow: false,
+        reason: `Backoff not elapsed (${Math.round(blockedAge / 1000)}s / ${Math.round(requiredBackoff / 1000)}s)`,
+        shouldDeadletter: false,
+      };
+    }
+  }
+
+  return {
+    allow: true,
+    reason: `Retry attempt ${retryCount + 1}/${maxRetries}`,
+  };
+}
+
 /**
  * Check blocked tasks for unblocking/recovery.
  * Handles both dependency-based blocks and dispatch-failure retries.
  */
 export function checkBlockedTaskRecovery(
   allTasks: Task[],
-  childrenByParent: Map<string, Task[]>
+  childrenByParent: Map<string, Task[]>,
+  maxRetries: number = DEFAULT_MAX_DISPATCH_RETRIES
 ): SchedulerAction[] {
   const actions: SchedulerAction[] = [];
   const blockedTasksForRecovery = allTasks.filter(t => t.frontmatter.status === "blocked");
-  
+
   for (const task of blockedTasksForRecovery) {
     const deps = task.frontmatter.dependsOn;
     const childTasks = childrenByParent.get(task.frontmatter.id) ?? [];
     const hasGate = deps.length > 0 || childTasks.length > 0;
 
-    // BUG-002: Check for dispatch failure recovery (tasks blocked due to spawn failures)
-    const retryCount = (task.frontmatter.metadata?.retryCount as number) ?? 0;
-    const lastBlockedAt = task.frontmatter.metadata?.lastBlockedAt as string | undefined;
     const blockReason = task.frontmatter.metadata?.blockReason as string | undefined;
-    const maxRetries = 3; // Maximum retry attempts
-    const retryDelayMs = 5 * 60 * 1000; // 5 minutes between retries
-
-    // Check if this is a dispatch-failure block (not dependency-based)
     const isDispatchFailure = blockReason?.includes("spawn_failed") ?? false;
 
-    if (isDispatchFailure && retryCount < maxRetries) {
-      // Check if enough time has passed for retry
-      if (lastBlockedAt) {
-        const blockedAge = Date.now() - new Date(lastBlockedAt).getTime();
-        if (blockedAge >= retryDelayMs) {
-          actions.push({
-            type: "requeue",
-            taskId: task.frontmatter.id,
-            taskTitle: task.frontmatter.title,
-            reason: `Retry attempt ${retryCount + 1}/${maxRetries} after dispatch failure`,
-          });
-          continue; // Skip dependency check for dispatch-failure tasks
-        }
+    if (isDispatchFailure) {
+      const guard = shouldAllowSpawnFailedRequeue(task, maxRetries);
+
+      if (guard.allow) {
+        actions.push({
+          type: "requeue",
+          taskId: task.frontmatter.id,
+          taskTitle: task.frontmatter.title,
+          reason: `${guard.reason} after dispatch failure`,
+        });
+      } else if (guard.shouldDeadletter) {
+        actions.push({
+          type: "deadletter",
+          taskId: task.frontmatter.id,
+          taskTitle: task.frontmatter.title,
+          reason: `${guard.reason} for dispatch failures — deadletter`,
+        });
       }
-    } else if (isDispatchFailure && retryCount >= maxRetries) {
-      // Max retries exceeded - emit alert
-      actions.push({
-        type: "alert",
-        taskId: task.frontmatter.id,
-        taskTitle: task.frontmatter.title,
-        reason: `Max retries (${maxRetries}) exceeded for dispatch failures — manual intervention required`,
-      });
-      continue; // Skip dependency check
+      // If !allow && !shouldDeadletter, backoff pending — do nothing this cycle
+      continue; // Skip dependency check for dispatch-failure tasks
     }
 
     // Dependency-based unblocking (existing logic)
@@ -196,6 +273,6 @@ export function checkBlockedTaskRecovery(
       });
     }
   }
-  
+
   return actions;
 }

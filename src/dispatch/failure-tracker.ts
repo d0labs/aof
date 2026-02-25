@@ -112,6 +112,7 @@ export async function resetDispatchFailures(
   delete task.frontmatter.metadata.retryCount;
   delete task.frontmatter.metadata.lastDispatchFailureReason;
   delete task.frontmatter.metadata.lastDispatchFailureAt;
+  delete task.frontmatter.metadata.errorClass;
   task.frontmatter.updatedAt = new Date().toISOString();
 
   // Write updated task back to file
