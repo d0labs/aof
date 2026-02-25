@@ -7,6 +7,7 @@
  */
 
 import { confirm, select } from "@inquirer/prompts";
+import type { Command } from "commander";
 import { mkdir, copyFile, access } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { join, dirname, resolve } from "node:path";
@@ -110,6 +111,20 @@ export async function init(opts: InitOptions = {}): Promise<void> {
 
   // Summary
   printSummary(state, detection.configPath);
+}
+
+/**
+ * Register the `init` command with the CLI.
+ */
+export function registerInitCommand(program: Command): void {
+  program
+    .command("init")
+    .description("Interactive AOF + OpenClaw integration wizard")
+    .option("--yes", "Run non-interactively with defaults")
+    .option("--skip-openclaw", "Skip OpenClaw integration steps")
+    .action(async (opts: InitOptions) => {
+      await init(opts);
+    });
 }
 
 // ---------------------------------------------------------------------------

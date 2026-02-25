@@ -24,7 +24,7 @@ import { install, update, list } from "../packaging/installer.js";
 import { getChannel, setChannel, checkForUpdates, getVersionManifest } from "../packaging/channels.js";
 import { selfUpdate, rollbackUpdate } from "../packaging/updater.js";
 import { runMigrations } from "../packaging/migrations.js";
-import { registerInitCommand } from "./commands/init.js";
+import { registerInitCommand } from "./init.js";
 import { registerDaemonCommands } from "./commands/daemon.js";
 import { registerTaskCommands } from "./commands/task.js";
 import { registerMemoryCommands } from "./commands/memory.js";
