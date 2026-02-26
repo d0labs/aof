@@ -326,7 +326,7 @@ export function registerUpdateCommand(program: Command): void {
         // Perform update
         console.log("\n🚀 Updating AOF...");
 
-        const downloadUrl = `https://github.com/aof/aof/releases/download/v${updateCheck.latestVersion}/aof-${updateCheck.latestVersion}.tar.gz`;
+        const downloadUrl = `https://github.com/d0labs/aof/releases/download/v${updateCheck.latestVersion}/aof-${updateCheck.latestVersion}.tar.gz`;
 
         const result = await selfUpdate({
           aofRoot: root,
