@@ -4,6 +4,7 @@
  * Extracted from task-dispatcher.ts (AOF-m2j) to keep modules under 300 LOC.
  */
 
+import { randomUUID } from "node:crypto";
 import type { Task, TaskStatus } from "../schemas/task.js";
 import type { ITaskStore } from "../store/interfaces.js";
 import type { EventLogger } from "../events/logger.js";
@@ -63,6 +64,9 @@ export async function executeAssignAction(
     return { executed, failed };
   }
 
+  // Generate correlation ID for end-to-end dispatch tracing (before try so catch can use it)
+  const correlationId = randomUUID();
+
   try {
     const latest = await store.get(action.taskId);
     if (!latest) {
@@ -96,6 +100,7 @@ export async function executeAssignAction(
       await logger.logAction("action.started", "scheduler", action.taskId, {
         action: action.type,
         agent: action.agent,
+        correlationId,
       });
     } catch {
       // Logging errors should not crash the scheduler
@@ -105,6 +110,17 @@ export async function executeAssignAction(
     const leasedTask = await acquireLease(store, action.taskId, action.agent!, {
       ttlMs: config.defaultLeaseTtlMs,
     });
+
+    // Store correlation ID in task metadata before spawn
+    if (leasedTask) {
+      leasedTask.frontmatter.metadata = {
+        ...leasedTask.frontmatter.metadata,
+        correlationId,
+      };
+      const serialized = serializeTask(leasedTask);
+      const metadataPath = leasedTask.path ?? join(store.tasksDir, "in-progress", `${leasedTask.frontmatter.id}.md`);
+      await writeFileAtomic(metadataPath, serialized);
+    }
 
     // Build task context using post-lease task path (now in-progress/)
     const taskPath =
@@ -141,27 +157,44 @@ export async function executeAssignAction(
       }
     }
 
-    // Spawn agent session
+    // Spawn agent session with correlation ID
     const result = await config.executor.spawnSession(context, {
       timeoutMs: config.spawnTimeoutMs ?? 30_000,
+      correlationId,
     });
 
     if (result.success) {
+      // Store sessionId in task metadata alongside correlationId
+      if (result.sessionId) {
+        const dispatchedTaskForSession = await store.get(action.taskId);
+        if (dispatchedTaskForSession) {
+          dispatchedTaskForSession.frontmatter.metadata = {
+            ...dispatchedTaskForSession.frontmatter.metadata,
+            sessionId: result.sessionId,
+          };
+          const serialized = serializeTask(dispatchedTaskForSession);
+          const sessionTaskPath = dispatchedTaskForSession.path ?? join(store.tasksDir, "in-progress", `${dispatchedTaskForSession.frontmatter.id}.md`);
+          await writeFileAtomic(sessionTaskPath, serialized);
+        }
+      }
+
       try {
         await logger.logDispatch("dispatch.matched", "scheduler", action.taskId, {
           agent: action.agent,
           sessionId: result.sessionId,
+          correlationId,
         });
       } catch {
         // Logging errors should not crash the scheduler
       }
-      
+
       // Log action completion
       try {
         await logger.logAction("action.completed", "scheduler", action.taskId, {
           action: action.type,
           success: true,
           sessionId: result.sessionId,
+          correlationId,
         });
       } catch {
         // Logging errors should not crash the scheduler
@@ -169,7 +202,7 @@ export async function executeAssignAction(
 
       startLeaseRenewal(store, action.taskId, action.agent!, config.defaultLeaseTtlMs);
       executed = true;
-      
+
       // AOF-adf: Update throttle state after successful dispatch
       const dispatchedTask = await store.get(action.taskId);
       if (dispatchedTask) {
@@ -256,22 +289,24 @@ export async function executeAssignAction(
           agent: action.agent,
           error: result.error,
           errorMessage: result.error,
+          correlationId,
         });
       } catch {
         // Logging errors should not crash the scheduler
       }
-      
+
       try {
         await logger.logAction("action.completed", "scheduler", action.taskId, {
           action: action.type,
           success: false,
           error: result.error,
           errorMessage: result.error,
+          correlationId,
         });
       } catch {
         // Logging errors should not crash the scheduler
       }
-      
+
       // Don't count as executed when spawn fails
       // executed remains false, mark as failed
       failed = true;
@@ -280,19 +315,20 @@ export async function executeAssignAction(
     const error = err as Error;
     const errorMsg = error.message;
     const errorStack = error.stack ?? "No stack trace available";
-    
+
     console.error(`[AOF] Exception dispatching ${action.taskId} (agent: ${action.agent}): ${errorMsg}`);
-    
+
     try {
       await logger.logDispatch("dispatch.error", "scheduler", action.taskId, {
         error: errorMsg,
         errorMessage: errorMsg,
         errorStack: errorStack,
+        correlationId,
       });
     } catch {
       // Logging errors should not crash the scheduler
     }
-    
+
     try {
       await logger.logAction("action.completed", "scheduler", action.taskId, {
         action: action.type,
@@ -300,6 +336,7 @@ export async function executeAssignAction(
         error: errorMsg,
         errorMessage: errorMsg,
         errorStack: errorStack,
+        correlationId,
       });
     } catch {
       // Logging errors should not crash the scheduler

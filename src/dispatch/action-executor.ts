@@ -155,6 +155,31 @@ export async function executeActions(
               break;
             }
 
+            // Read correlation ID from task metadata for event logging
+            const staleCorrelationId = staleTask.frontmatter.metadata?.correlationId as string | undefined;
+
+            // If adapter available and session ID known, use adapter for force-completion
+            const staleSessionId = staleTask.frontmatter.metadata?.sessionId as string | undefined;
+            if (config.executor && staleSessionId) {
+              try {
+                await config.executor.forceCompleteSession(staleSessionId);
+                console.info(`[AOF] Force-completed session ${staleSessionId} for task ${action.taskId}`);
+
+                // Log session force-completion event
+                try {
+                  await logger.log("session.force_completed", "scheduler", {
+                    taskId: action.taskId,
+                    payload: { sessionId: staleSessionId, correlationId: staleCorrelationId, reason: "stale_heartbeat" },
+                  });
+                } catch {
+                  // Logging errors should not crash the scheduler
+                }
+              } catch (err) {
+                console.warn(`[AOF] forceCompleteSession failed for ${staleSessionId}: ${(err as Error).message}`);
+                // Continue with existing recovery logic even if force-complete fails
+              }
+            }
+
             const runResult = await readRunResult(store, action.taskId);
             const fromStatus = staleTask.frontmatter.status;
 

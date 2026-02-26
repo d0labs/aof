@@ -121,6 +121,9 @@ export const EventType = z.enum([
   "murmur_task_created",
   "murmur_create_task",
 
+  // Session lifecycle
+  "session.force_completed",
+
   // Scheduler alerts
   "scheduler_alert",
   "scheduler_action_failed",
