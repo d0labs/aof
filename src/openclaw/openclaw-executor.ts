@@ -1,5 +1,5 @@
 /**
- * OpenClawExecutor — spawns agent sessions via in-process runEmbeddedPiAgent().
+ * OpenClawAdapter — spawns agent sessions via in-process runEmbeddedPiAgent().
  *
  * Runs agents directly inside the gateway process, bypassing HTTP dispatch,
  * WebSocket auth, and device pairing entirely. This is the same code path
@@ -12,8 +12,10 @@
 import { randomUUID } from "node:crypto";
 import { join } from "node:path";
 import { homedir } from "node:os";
-import type { DispatchExecutor, TaskContext, ExecutorResult } from "../dispatch/executor.js";
+import type { GatewayAdapter, TaskContext, SpawnResult, SessionStatus } from "../dispatch/executor.js";
 import type { OpenClawApi } from "./types.js";
+import type { ITaskStore } from "../store/interfaces.js";
+import { readHeartbeat, markRunArtifactExpired } from "../recovery/run-artifacts.js";
 
 /** Minimal shape of the functions we need from extensionAPI.js */
 interface ExtensionApi {
@@ -47,16 +49,23 @@ interface EmbeddedPiRunResult {
 
 const DEFAULT_TIMEOUT_MS = 300_000; // 5 minutes
 
-export class OpenClawExecutor implements DispatchExecutor {
+export class OpenClawAdapter implements GatewayAdapter {
   private extensionApi: ExtensionApi | undefined;
   private extensionApiLoadPromise: Promise<ExtensionApi> | undefined;
+  private sessionToTask = new Map<string, string>();
 
-  constructor(private readonly api: OpenClawApi) {
-    console.info("[AOF] OpenClawExecutor initialized (embedded agent mode)");
+  constructor(
+    private readonly api: OpenClawApi,
+    private readonly store?: ITaskStore,
+  ) {
+    console.info("[AOF] OpenClawAdapter initialized (embedded agent mode)");
   }
 
-  async spawn(context: TaskContext, opts?: { timeoutMs?: number }): Promise<ExecutorResult> {
-    console.info(`[AOF] OpenClawExecutor.spawn() for task ${context.taskId}, agent: ${context.agent}`);
+  async spawnSession(
+    context: TaskContext,
+    opts?: { timeoutMs?: number; correlationId?: string },
+  ): Promise<SpawnResult> {
+    console.info(`[AOF] OpenClawAdapter.spawnSession() for task ${context.taskId}, agent: ${context.agent}`);
 
     let ext: ExtensionApi;
     try {
@@ -115,6 +124,9 @@ export class OpenClawExecutor implements DispatchExecutor {
         thinking: context.thinking,
       });
 
+      // Track sessionId -> taskId mapping for getSessionStatus / forceCompleteSession
+      this.sessionToTask.set(sessionId, context.taskId);
+
       return {
         success: true,
         sessionId,
@@ -131,6 +143,47 @@ export class OpenClawExecutor implements DispatchExecutor {
         platformLimit,
       };
     }
+  }
+
+  async getSessionStatus(sessionId: string): Promise<SessionStatus> {
+    const taskId = this.sessionToTask.get(sessionId);
+    if (!taskId) {
+      return { sessionId, alive: false };
+    }
+
+    if (!this.store) {
+      // No store available — cannot check heartbeat
+      return { sessionId, alive: false };
+    }
+
+    const heartbeat = await readHeartbeat(this.store, taskId);
+    if (!heartbeat) {
+      return { sessionId, alive: false };
+    }
+
+    const expiresAt = heartbeat.expiresAt
+      ? new Date(heartbeat.expiresAt).getTime()
+      : 0;
+
+    return {
+      sessionId,
+      alive: expiresAt > Date.now(),
+      lastHeartbeatAt: heartbeat.lastHeartbeat,
+    };
+  }
+
+  async forceCompleteSession(sessionId: string): Promise<void> {
+    const taskId = this.sessionToTask.get(sessionId);
+    if (!taskId) {
+      return;
+    }
+
+    if (this.store) {
+      await markRunArtifactExpired(this.store, taskId, "force_completed");
+    }
+
+    this.sessionToTask.delete(sessionId);
+    console.info(`[AOF] Force-completed session ${sessionId} (task ${taskId})`);
   }
 
   /** Run the embedded agent in the background, logging results when done. */
@@ -184,7 +237,7 @@ export class OpenClawExecutor implements DispatchExecutor {
   }
 
   private normalizeAgentId(agent: string): string {
-    // Strip "agent:" prefix if present (e.g. "agent:swe-backend:main" → "swe-backend")
+    // Strip "agent:" prefix if present (e.g. "agent:swe-backend:main" -> "swe-backend")
     if (agent.startsWith("agent:")) {
       const parts = agent.split(":");
       return parts[1] ?? agent;
@@ -288,3 +341,6 @@ export class OpenClawExecutor implements DispatchExecutor {
     return undefined;
   }
 }
+
+/** @deprecated Use OpenClawAdapter instead. */
+export const OpenClawExecutor = OpenClawAdapter;
