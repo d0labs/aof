@@ -55,8 +55,13 @@ function _expandPath(p: string): string {
   return p.replace(/^~(?=$|[/\\])/, homedir());
 }
 
+/** Ensure the memory_meta table exists for tracking rebuild metadata. */
+function ensureMemoryMeta(db: SqliteDb): void {
+  db.exec("CREATE TABLE IF NOT EXISTS memory_meta (key TEXT PRIMARY KEY, value TEXT)");
+}
+
 /** Rebuild the HNSW index from all embeddings stored in sqlite vec_chunks. */
-function rebuildHnswFromDb(db: SqliteDb, hnsw: HnswIndex): void {
+export function rebuildHnswFromDb(db: SqliteDb, hnsw: HnswIndex): void {
   const rows = db
     .prepare("SELECT chunk_id, embedding FROM vec_chunks")
     .all() as Array<{ chunk_id: bigint; embedding: Buffer }>;
@@ -67,6 +72,10 @@ function rebuildHnswFromDb(db: SqliteDb, hnsw: HnswIndex): void {
   }));
 
   hnsw.rebuild(chunks);
+
+  // Track last rebuild time in memory_meta
+  ensureMemoryMeta(db);
+  db.prepare("INSERT OR REPLACE INTO memory_meta (key, value) VALUES ('last_rebuild_time', datetime('now'))").run();
 }
 
 export function registerMemoryModule(api: OpenClawApi): void {
@@ -86,15 +95,39 @@ export function registerMemoryModule(api: OpenClawApi): void {
 
   const hnswPath = dbPath.replace(/\.db$/, "-hnsw.dat");
   const hnsw = new HnswIndex(dimensions);
+  ensureMemoryMeta(db);
+
+  let needsRebuild = false;
+
   if (existsSync(hnswPath)) {
     try {
       hnsw.load(hnswPath);
     } catch {
-      // Corrupt or incompatible index — rebuild from sqlite below
-      rebuildHnswFromDb(db, hnsw);
+      // Corrupt or incompatible index file
+      console.warn("[AOF] HNSW index corrupt or incompatible. Rebuilding from SQLite...");
+      needsRebuild = true;
     }
   } else {
+    console.warn("[AOF] HNSW index missing. Rebuilding from SQLite...");
+    needsRebuild = true;
+  }
+
+  // Parity check: compare HNSW count to SQLite count every startup
+  if (!needsRebuild) {
+    const hnswCount = hnsw.count;
+    const sqliteCount = (db.prepare("SELECT COUNT(*) as c FROM vec_chunks").get() as { c: number }).c;
+    if (hnswCount !== sqliteCount) {
+      console.warn(
+        `[AOF] HNSW-SQLite desync detected (HNSW: ${hnswCount}, SQLite: ${sqliteCount}). Rebuilding index...`,
+      );
+      needsRebuild = true;
+    }
+  }
+
+  if (needsRebuild) {
     rebuildHnswFromDb(db, hnsw);
+    // Persist the freshly rebuilt index to disk
+    hnsw.save(hnswPath);
   }
 
   const vectorStore = new VectorStore(db, hnsw, hnswPath);
