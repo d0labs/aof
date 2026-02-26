@@ -62,6 +62,10 @@ export interface SchedulerConfig {
   cascadeBlocks?: boolean;
   /** Maximum dispatch retries before deadletter (default: 3). */
   maxDispatchRetries?: number;
+  /** Maximum time for a single poll cycle in ms (default: 30_000). Consumed by AOFService. */
+  pollTimeoutMs?: number;
+  /** Maximum time for a single task action in ms (default: 10_000). */
+  taskActionTimeoutMs?: number;
 }
 
 export interface SchedulerAction {

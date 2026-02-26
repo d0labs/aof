@@ -24,6 +24,10 @@ export interface AOFServiceConfig {
    * Default: false. See SchedulerConfig.cascadeBlocks.
    */
   cascadeBlocks?: boolean;
+  /** Maximum time for a single poll cycle in ms (default: 30_000). */
+  pollTimeoutMs?: number;
+  /** Maximum time for a single task action in ms (default: 10_000). */
+  taskActionTimeoutMs?: number;
 }
 
 export interface AOFServiceDependencies {
@@ -59,6 +63,7 @@ export class AOFService {
   private readonly pollIntervalMs: number;
   private readonly protocolRouter: ProtocolRouter;
   private readonly vaultRoot?: string;
+  private readonly pollTimeoutMs: number;
 
   // Multi-project support
   private projectStores: Map<string, ITaskStore> = new Map();
@@ -90,7 +95,8 @@ export class AOFService {
     this.notifier = deps.notifier;
     this.poller = deps.poller ?? poll;
     this.pollIntervalMs = config.pollIntervalMs ?? 30_000;
-    
+    this.pollTimeoutMs = config.pollTimeoutMs ?? 30_000;
+
     // Build project store resolver for protocol router
     const projectStoreResolver = this.vaultRoot
       ? (projectId: string) => this.projectStores.get(projectId)
@@ -111,6 +117,8 @@ export class AOFService {
       executor: deps.executor,
       maxConcurrentDispatches: config.maxConcurrentDispatches,
       cascadeBlocks: config.cascadeBlocks,
+      pollTimeoutMs: config.pollTimeoutMs,
+      taskActionTimeoutMs: config.taskActionTimeoutMs,
     };
   }
 
@@ -211,17 +219,23 @@ export class AOFService {
 
   private async runPoll(): Promise<void> {
     const start = performance.now();
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), this.pollTimeoutMs);
+
     try {
-      let result: PollResult;
-      
-      if (this.vaultRoot && this.projectStores.size > 0) {
-        // Multi-project mode: poll all stores and aggregate
-        result = await this.pollAllProjects();
-      } else {
-        // Single-store mode (backward compatible)
-        result = await this.poller(this.store, this.logger, this.schedulerConfig);
-      }
-      
+      const pollPromise = this.vaultRoot && this.projectStores.size > 0
+        ? this.pollAllProjects()
+        : this.poller(this.store, this.logger, this.schedulerConfig);
+
+      const result = await Promise.race([
+        pollPromise,
+        new Promise<never>((_, reject) => {
+          controller.signal.addEventListener("abort", () => {
+            reject(new Error(`Poll timeout after ${this.pollTimeoutMs}ms`));
+          });
+        }),
+      ]);
+
       this.lastPollResult = result;
       this.lastPollAt = new Date().toISOString();
       this.lastError = undefined;
@@ -231,9 +245,20 @@ export class AOFService {
       }
     } catch (err) {
       const message = (err as Error).message;
+      if (message.includes("Poll timeout")) {
+        console.warn(`[AOF] Poll timed out after ${this.pollTimeoutMs}ms — skipping to next cycle`);
+        try {
+          await this.logger.log("poll.timeout", "scheduler", {
+            payload: { timeoutMs: this.pollTimeoutMs, durationMs: Math.round(performance.now() - start) },
+          });
+        } catch {
+          // Logging errors should not break the poll cycle
+        }
+      }
       this.lastError = message;
       if (this.metrics) this.metrics.recordPollFailure();
     } finally {
+      clearTimeout(timeoutId);
       this.lastPollDurationMs = Math.round(performance.now() - start);
     }
   }

@@ -27,6 +27,8 @@ export const EventType = z.enum([
   "task.unblocked",
   "task.validation.failed",
   "task.deadletter",
+  "task.deadlettered",
+  "task.reclaimed",
   "task.resurrected",
   "task.dep.added",
   "task.dep.removed",
@@ -90,6 +92,7 @@ export const EventType = z.enum([
 
   // Scheduler
   "scheduler.poll",
+  "poll.timeout",
 
   // Concurrency
   "concurrency.platformLimit",
