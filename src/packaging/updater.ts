@@ -9,6 +9,7 @@ import { tmpdir } from "node:os";
 import { createWriteStream } from "node:fs";
 import { pipeline } from "node:stream/promises";
 import { Readable } from "node:stream";
+import { execSync } from "node:child_process";
 
 export interface UpdateHooks {
   preUpdate?: (ctx: {
@@ -336,12 +337,18 @@ async function downloadFile(
 }
 
 async function extractTarball(tarballPath: string, targetDir: string): Promise<void> {
-  // For now, just create target directory
-  // In production, would use tar extraction library
   await mkdir(targetDir, { recursive: true });
 
-  // Placeholder: in real implementation, extract tarball to targetDir
-  // Using a library like 'tar' or executing 'tar' command
+  try {
+    execSync(`tar -xzf "${tarballPath}" -C "${targetDir}"`, {
+      stdio: "pipe",
+      timeout: 60_000,
+    });
+  } catch (error) {
+    throw new Error(
+      `Failed to extract tarball: ${error instanceof Error ? error.message : String(error)}`
+    );
+  }
 }
 
 async function mkdtemp(prefix: string): Promise<string> {

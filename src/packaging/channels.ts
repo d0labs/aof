@@ -39,7 +39,7 @@ export interface UpdateCheckResult {
 
 const VALID_CHANNELS: Channel[] = ["stable", "beta", "canary"];
 const DEFAULT_CHANNEL: Channel = "stable";
-const GITHUB_REPO = "aof/aof"; // Replace with actual repo
+const GITHUB_REPO = "demerzel-ops/aof";
 const BACKUP_DIR_NAME = ".aof-backup";
 
 /**
