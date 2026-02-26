@@ -366,6 +366,40 @@ async function daemonStartForeground(dataDir: string): Promise<void> {
 // Stop
 // ---------------------------------------------------------------------------
 
+/**
+ * Try to stop the daemon via the OS supervisor (launchctl/systemctl).
+ * Returns true if the supervisor command succeeded, false otherwise.
+ */
+async function stopViaSupervisor(): Promise<boolean> {
+  try {
+    const { execSync } = await import("node:child_process");
+    if (process.platform === "darwin") {
+      execSync(`launchctl bootout gui/$(id -u)/${AOF_SERVICE_LABEL}`, {
+        stdio: "ignore",
+        timeout: 5000,
+      });
+      return true;
+    } else if (process.platform === "linux") {
+      execSync(`systemctl --user stop ${AOF_SERVICE_LABEL}`, {
+        stdio: "ignore",
+        timeout: 5000,
+      });
+      return true;
+    }
+  } catch {
+    // Supervisor command failed -- fall back to direct signal
+  }
+  return false;
+}
+
+/**
+ * Format the drain progress message: shows remaining seconds.
+ */
+export function formatDrainProgress(elapsedMs: number, timeoutMs: number): string {
+  const remainingSeconds = Math.max(0, Math.ceil((timeoutMs - elapsedMs) / 1000));
+  return `  Draining... ${remainingSeconds}s remaining`;
+}
+
 export async function daemonStop(
   dataDir: string,
   options: DaemonStopOptions,
@@ -374,50 +408,84 @@ export async function daemonStop(
 
   if (!pid) {
     console.log("Daemon is not running. Run `aof daemon install` to start.");
+    process.exitCode = 2;
     return;
   }
 
   if (!isProcessRunning(pid)) {
     console.log("Daemon is not running (stale PID file).");
     cleanupStalePidFile(dataDir);
+    process.exitCode = 2;
     return;
   }
 
   const timeoutSeconds = parseInt(options.timeout, 10);
-  console.log(`Stopping daemon (PID: ${pid})...\n`);
+  const timeoutMs = timeoutSeconds * 1000;
 
-  try {
-    process.kill(pid, "SIGTERM");
-    console.log("   Sent SIGTERM, waiting for graceful shutdown...");
-  } catch (err) {
-    console.error(`Failed to send SIGTERM: ${(err as Error).message}`);
-    process.exitCode = 1;
-    return;
+  console.log(`Stopping daemon (PID ${pid})...`);
+
+  // Try OS supervisor first, unless --force is specified
+  if (!options.force) {
+    const supervisorStopped = await stopViaSupervisor();
+    if (supervisorStopped) {
+      console.log("  Sent stop via OS supervisor");
+    }
   }
 
-  const startTime = Date.now();
-  while (Date.now() - startTime < timeoutSeconds * 1000) {
-    if (!isProcessRunning(pid)) {
-      console.log("   Daemon stopped gracefully");
-      cleanupStalePidFile(dataDir);
-      console.log("\nDaemon stopped.");
+  // If the process is still running, send SIGTERM directly
+  if (isProcessRunning(pid)) {
+    try {
+      process.kill(pid, "SIGTERM");
+      console.log("  Sent SIGTERM, draining in-flight work...");
+    } catch (err) {
+      console.error(`Failed to send SIGTERM: ${(err as Error).message}`);
+      process.exitCode = 1;
       return;
     }
-    await new Promise((resolve) => setTimeout(resolve, 100));
   }
 
-  console.log(`   Timeout (${timeoutSeconds}s) reached, sending SIGKILL...`);
+  // Poll for process exit with drain countdown
+  const startTime = Date.now();
+  let lastDrainMessageAt = 0;
+
+  while (Date.now() - startTime < timeoutMs) {
+    if (!isProcessRunning(pid)) {
+      console.log("  Drain complete.");
+      cleanupStalePidFile(dataDir);
+      cleanupSocketFile(dataDir);
+      console.log("Daemon stopped.");
+      return;
+    }
+
+    const elapsed = Date.now() - startTime;
+
+    // Print drain status every 2 seconds
+    if (elapsed - lastDrainMessageAt >= 2000) {
+      console.log(formatDrainProgress(elapsed, timeoutMs));
+      lastDrainMessageAt = elapsed;
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, 500));
+  }
+
+  // Timeout reached -- force kill
+  console.log(`  Timeout (${timeoutSeconds}s) reached, sending SIGKILL...`);
   try {
     process.kill(pid, "SIGKILL");
-    console.log("   Daemon force-killed");
+    // Wait briefly for the kernel to clean up
+    await new Promise((resolve) => setTimeout(resolve, 200));
   } catch (err) {
-    console.error(`Failed to force-kill: ${(err as Error).message}`);
-    process.exitCode = 1;
-    return;
+    // Process may have already exited between the timeout check and SIGKILL
+    if ((err as NodeJS.ErrnoException).code !== "ESRCH") {
+      console.error(`Failed to force-kill: ${(err as Error).message}`);
+      process.exitCode = 1;
+      return;
+    }
   }
 
   cleanupStalePidFile(dataDir);
-  console.log("\nDaemon stopped (force-killed).");
+  cleanupSocketFile(dataDir);
+  console.log("Daemon stopped (force-killed).");
 }
 
 // ---------------------------------------------------------------------------
@@ -516,10 +584,11 @@ export function registerDaemonCommands(program: Command): void {
   daemon
     .command("stop")
     .description("Stop the running daemon")
-    .option("--timeout <seconds>", "Shutdown timeout in seconds", "10")
-    .action(async (opts: { timeout: string }) => {
+    .option("--timeout <seconds>", "Shutdown timeout in seconds", "15")
+    .option("--force", "Bypass OS supervisor and send SIGTERM directly")
+    .action(async (opts: { timeout: string; force?: boolean }) => {
       const root = program.opts()["root"] as string;
-      await daemonStop(root, opts);
+      await daemonStop(root, { timeout: opts.timeout, force: opts.force });
     });
 
   daemon
