@@ -141,27 +141,59 @@ const PERMANENT_ERROR_PATTERNS = [
   "unauthorized",
 ];
 
+/** Patterns that indicate rate-limit errors (retryable, but distinct for observability). */
+const RATE_LIMIT_PATTERNS = [
+  "rate limit",
+  "rate_limit",
+  "too many requests",
+  "429",
+  "throttled",
+  "quota exceeded",
+];
+
 /**
- * Classify a spawn error as transient or permanent.
+ * Classify a spawn error as transient, permanent, or rate_limited.
  * Permanent errors should deadletter immediately (no retry).
+ * Rate-limited errors are retried with backoff (same as transient) but
+ * tracked separately for observability and future circuit-breaker (Phase 4, HEAL-03).
  */
-export function classifySpawnError(error: string): "transient" | "permanent" {
+export function classifySpawnError(error: string): "transient" | "permanent" | "rate_limited" {
   const lower = error.toLowerCase();
   for (const pattern of PERMANENT_ERROR_PATTERNS) {
     if (lower.includes(pattern)) return "permanent";
+  }
+  for (const pattern of RATE_LIMIT_PATTERNS) {
+    if (lower.includes(pattern)) return "rate_limited";
   }
   return "transient";
 }
 
 /**
- * Compute exponential backoff delay for spawn failure retries.
- * Formula: min(60s * 3^retryCount, 15min)
- * Gives: 60s, 180s, 540s, 900s, 900s, ...
+ * Compute exponential backoff delay for spawn failure retries with jitter.
+ * Formula: min(baseMs * 3^retryCount, ceilingMs) +/- jitter
+ * Base gives: 60s, 180s, 540s, 900s, 900s, ...
+ * Jitter prevents thundering herd when multiple tasks retry simultaneously.
+ *
+ * @param retryCount - Current retry attempt (0-based)
+ * @param opts.baseMs - Base delay in ms (default: 60,000 = 1 minute)
+ * @param opts.ceilingMs - Maximum delay in ms (default: 900,000 = 15 minutes)
+ * @param opts.jitterFactor - Jitter range as fraction of delay (default: 0.25 = +/-25%)
+ * @param opts.jitterFn - Random number generator [0,1) for test determinism (default: Math.random)
  */
-export function computeRetryBackoffMs(retryCount: number): number {
-  const baseMs = 60_000; // 1 minute
-  const ceilingMs = 15 * 60_000; // 15 minutes
-  return Math.min(baseMs * Math.pow(3, retryCount), ceilingMs);
+export function computeRetryBackoffMs(retryCount: number, opts?: {
+  baseMs?: number;
+  ceilingMs?: number;
+  jitterFactor?: number;
+  jitterFn?: () => number;
+}): number {
+  const baseMs = opts?.baseMs ?? 60_000;
+  const ceilingMs = opts?.ceilingMs ?? 15 * 60_000;
+  const jitterFactor = opts?.jitterFactor ?? 0.25;
+  const random = opts?.jitterFn ?? Math.random;
+
+  const delay = Math.min(baseMs * Math.pow(3, retryCount), ceilingMs);
+  const jitter = delay * jitterFactor * (random() * 2 - 1); // +/- jitterFactor
+  return Math.max(0, Math.round(delay + jitter));
 }
 
 /**
@@ -177,6 +209,8 @@ export function shouldAllowSpawnFailedRequeue(
   const errorClass = task.frontmatter.metadata?.errorClass as string | undefined;
 
   // Permanent errors should never be retried
+  // Note: rate_limited falls through to retry logic (same as transient).
+  // Phase 4 (HEAL-03) adds circuit breaker for rate_limited errors.
   if (errorClass === "permanent") {
     return {
       allow: false,
