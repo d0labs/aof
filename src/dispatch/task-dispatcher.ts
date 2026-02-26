@@ -19,7 +19,8 @@ import { checkThrottle, updateThrottleState } from "./throttle.js";
 import { loadOrgChart } from "../org/loader.js";
 import { join } from "node:path";
 
-export { executeAssignAction } from "./assign-executor.js";
+export { executeAssignAction, loadProjectManifest } from "./assign-executor.js";
+import { loadProjectManifest } from "./assign-executor.js";
 
 export interface DispatchConfig {
   dryRun: boolean;
@@ -214,6 +215,24 @@ export async function buildDispatchActions(
     
     const targetAgent = routing.agent ?? routing.role ?? routing.team;
 
+    // PROJ-03: Check project participant list before assigning
+    const projectId = task.frontmatter.project;
+    if (projectId && targetAgent) {
+      const manifest = await loadProjectManifest(store, projectId);
+      if (manifest?.participants && manifest.participants.length > 0) {
+        if (!manifest.participants.includes(targetAgent)) {
+          actions.push({
+            type: "alert",
+            taskId: task.frontmatter.id,
+            taskTitle: task.frontmatter.title,
+            reason: `Agent "${targetAgent}" is not a participant in project "${projectId}". Participants: ${manifest.participants.join(", ")}`,
+          });
+          continue;
+        }
+      }
+      // Empty participants list = unrestricted access (opt-in isolation per user decision)
+    }
+
     if (targetAgent) {
       actions.push({
         type: "assign",
@@ -224,7 +243,7 @@ export async function buildDispatchActions(
       });
       pendingDispatches++;
       dispatchesThisPoll++; // AOF-adf: Track dispatches this poll cycle
-      
+
       // AOF-adf: Reserve team concurrency slot for this planned dispatch
       if (team && !config.dryRun) {
         inProgressByTeam.set(team, (inProgressByTeam.get(team) ?? 0) + 1);

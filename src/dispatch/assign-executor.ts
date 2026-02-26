@@ -23,12 +23,20 @@ import type { TaskContext } from "./executor.js";
 import { classifySpawnError } from "./scheduler-helpers.js";
 import { transitionToDeadletter } from "./failure-tracker.js";
 
-async function loadProjectManifest(
+/**
+ * Load project manifest from disk.
+ * When projectId matches store.projectId, reads from store.projectRoot/project.yaml.
+ * Otherwise falls back to store.projectRoot/projects/<projectId>/project.yaml.
+ */
+export async function loadProjectManifest(
   store: ITaskStore,
   projectId: string
 ): Promise<ProjectManifest | null> {
   try {
-    const projectPath = join(store.projectRoot, "projects", projectId, "project.yaml");
+    // If the projectId matches the store's own project, read directly from project root
+    const projectPath = (store.projectId === projectId)
+      ? join(store.projectRoot, "project.yaml")
+      : join(store.projectRoot, "projects", projectId, "project.yaml");
     const content = await readFile(projectPath, "utf-8");
     const manifest = parseYaml(content) as ProjectManifest;
     return manifest;
