@@ -97,6 +97,9 @@ export async function runWizard(opts: WizardOptions): Promise<WizardResult> {
     "events",
     "data",
     "org",
+    "memory",
+    "state",
+    "logs",
   ];
 
   for (const dir of directories) {
@@ -110,8 +113,16 @@ export async function runWizard(opts: WizardOptions): Promise<WizardResult> {
   const gitignoreContent = `# AOF Runtime Data
 events/
 data/
+memory/
+state/
+logs/
 .aof-state
 *.log
+*.db
+*.dat
+
+# Backups
+.aof-backup/
 
 # Dependencies
 node_modules/

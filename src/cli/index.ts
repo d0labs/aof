@@ -32,6 +32,7 @@ import { registerProjectCommands } from "./commands/project.js";
 import { registerOrgCommands } from "./commands/org.js";
 import { registerViewCommands } from "./commands/views.js";
 import { registerSystemCommands } from "./commands/system.js";
+import { registerSetupCommand } from "./commands/setup.js";
 
 const AOF_ROOT = process.env["AOF_ROOT"] ?? resolve(homedir(), "Projects", "AOF");
 
@@ -180,6 +181,9 @@ registerMemoryCommands(program);
 
 // --- system ---
 registerSystemCommands(program);
+
+// --- setup (installer post-extraction) ---
+registerSetupCommand(program);
 
 program.parseAsync().catch((err: unknown) => {
   console.error(err);
