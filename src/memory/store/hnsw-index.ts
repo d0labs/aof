@@ -6,6 +6,14 @@ export type HnswSearchResult = {
   distance: number;
 };
 
+/** Optional callback for logging resize events (wired from VectorStore). */
+export type ResizeEventLogger = (event: {
+  type: "memory.index.resized";
+  oldCapacity: number;
+  newCapacity: number;
+  currentCount: number;
+}) => void;
+
 const INITIAL_CAPACITY = 10_000;
 const GROWTH_FACTOR = 2;
 const DEFAULT_SPACE = "cosine" as const;
@@ -21,10 +29,12 @@ const DEFAULT_SPACE = "cosine" as const;
  */
 export class HnswIndex {
   private index: HierarchicalNSW;
-  private readonly dimensions: number;
+  private readonly _dimensions: number;
+  private readonly onResize: ResizeEventLogger | null;
 
-  constructor(dimensions: number) {
-    this.dimensions = dimensions;
+  constructor(dimensions: number, onResize?: ResizeEventLogger) {
+    this._dimensions = dimensions;
+    this.onResize = onResize ?? null;
     this.index = this.createIndex(INITIAL_CAPACITY);
   }
 
@@ -84,7 +94,7 @@ export class HnswIndex {
 
   /** Load an index from disk synchronously, replacing the current index. */
   load(filePath: string): void {
-    const loaded = new HierarchicalNSW(DEFAULT_SPACE, this.dimensions);
+    const loaded = new HierarchicalNSW(DEFAULT_SPACE, this._dimensions);
     loaded.readIndexSync(filePath, true /* allowReplaceDeleted */);
     this.index = loaded;
   }
@@ -93,10 +103,10 @@ export class HnswIndex {
 
   /**
    * Replace the current index with one rebuilt from the provided chunks.
-   * Use when the on-disk index is lost or corrupt.
+   * Uses 1.5x headroom to avoid immediate resize after rebuild.
    */
   rebuild(chunks: ReadonlyArray<{ id: number; embedding: number[] }>): void {
-    const capacity = Math.max(chunks.length, INITIAL_CAPACITY);
+    const capacity = Math.max(Math.ceil(chunks.length * 1.5), INITIAL_CAPACITY);
     const fresh = this.createIndex(capacity);
     for (const { id, embedding } of chunks) {
       fresh.addPoint(embedding, id);
@@ -111,10 +121,20 @@ export class HnswIndex {
     return this.index.getCurrentCount();
   }
 
+  /** Maximum number of elements the index can hold before needing a resize. */
+  get maxElements(): number {
+    return this.index.getMaxElements();
+  }
+
+  /** Number of embedding dimensions. */
+  get dimensions(): number {
+    return this._dimensions;
+  }
+
   // ─── Private helpers ─────────────────────────────────────────────────────
 
   private createIndex(capacity: number): HierarchicalNSW {
-    const idx = new HierarchicalNSW(DEFAULT_SPACE, this.dimensions);
+    const idx = new HierarchicalNSW(DEFAULT_SPACE, this._dimensions);
     idx.initIndex({
       maxElements: capacity,
       allowReplaceDeleted: true,
@@ -126,7 +146,17 @@ export class HnswIndex {
     const count = this.index.getCurrentCount();
     const max = this.index.getMaxElements();
     if (count >= max) {
-      this.index.resizeIndex(max * GROWTH_FACTOR);
+      const newCapacity = max * GROWTH_FACTOR;
+      this.index.resizeIndex(newCapacity);
+
+      if (this.onResize) {
+        this.onResize({
+          type: "memory.index.resized",
+          oldCapacity: max,
+          newCapacity,
+          currentCount: count,
+        });
+      }
     }
   }
 }

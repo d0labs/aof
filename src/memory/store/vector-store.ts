@@ -133,9 +133,39 @@ const CHUNK_UPDATE_COLUMNS: Record<
   accessedAt: "accessed_at",
 };
 
+/**
+ * Simple promise-based mutex for serializing async HNSW mutations.
+ * Node.js is single-threaded but async operations can interleave at await points.
+ */
+class Mutex {
+  private queue: Array<() => void> = [];
+  private locked = false;
+
+  async acquire(): Promise<() => void> {
+    if (!this.locked) {
+      this.locked = true;
+      return () => this.release();
+    }
+    return new Promise((resolve) => {
+      this.queue.push(() => resolve(() => this.release()));
+    });
+  }
+
+  private release(): void {
+    const next = this.queue.shift();
+    if (next) next();
+    else this.locked = false;
+  }
+}
+
 export class VectorStore {
   private readonly db: SqliteDb;
   private readonly hnsw: HnswIndex | null;
+  private readonly hnswPath: string | null;
+  private readonly mutex = new Mutex();
+
+  /** When true, search falls back to sqlite-vec (used during rebuild). */
+  rebuilding = false;
 
   private readonly insertChunkStmt;
   private readonly insertVectorStmt;
@@ -148,9 +178,10 @@ export class VectorStore {
   private readonly getChunkStmt;
   private readonly searchStmt;
 
-  constructor(db: SqliteDb, hnsw: HnswIndex | null = null) {
+  constructor(db: SqliteDb, hnsw: HnswIndex | null = null, hnswPath?: string) {
     this.db = db;
     this.hnsw = hnsw;
+    this.hnswPath = hnswPath ?? null;
     this.insertChunkStmt = db.prepare(INSERT_CHUNK_SQL);
     this.insertVectorStmt = db.prepare(INSERT_VECTOR_SQL);
     this.updateVectorStmt = db.prepare(UPDATE_VECTOR_SQL);
@@ -195,6 +226,7 @@ export class VectorStore {
     const chunkId = insert();
 
     this.hnsw?.add(chunkId, input.embedding);
+    this.saveIndex();
 
     return chunkId;
   }
@@ -223,6 +255,7 @@ export class VectorStore {
         toVecChunkId(id)
       );
       this.hnsw?.update(id, update.embedding);
+      this.saveIndex();
     }
   }
 
@@ -234,6 +267,7 @@ export class VectorStore {
 
     remove();
     this.hnsw?.remove(id);
+    this.saveIndex();
   }
 
   deleteChunksByFile(filePath: string): number {
@@ -255,6 +289,7 @@ export class VectorStore {
       for (const id of chunkIds) {
         this.hnsw!.remove(id);
       }
+      this.saveIndex();
     }
 
     return count;
@@ -267,7 +302,8 @@ export class VectorStore {
 
     const k = Math.floor(limit);
 
-    if (this.hnsw) {
+    // During rebuild, fall back to sqlite-vec for uninterrupted (lower quality) search
+    if (this.hnsw && !this.rebuilding) {
       return this.searchWithHnsw(embedding, k);
     }
 
@@ -275,6 +311,13 @@ export class VectorStore {
   }
 
   // ─── Private helpers ─────────────────────────────────────────────────────
+
+  /** Persist the HNSW index to disk for crash safety. */
+  private saveIndex(): void {
+    if (this.hnsw && this.hnswPath) {
+      this.hnsw.save(this.hnswPath);
+    }
+  }
 
   private searchWithHnsw(embedding: number[], k: number): VectorSearchResult[] {
     const hits = this.hnsw!.search(embedding, k);

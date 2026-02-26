@@ -97,7 +97,7 @@ export function registerMemoryModule(api: OpenClawApi): void {
     rebuildHnswFromDb(db, hnsw);
   }
 
-  const vectorStore = new VectorStore(db, hnsw);
+  const vectorStore = new VectorStore(db, hnsw, hnswPath);
   const ftsStore = new FtsStore(db);
   const searchEngine = new HybridSearchEngine(vectorStore, ftsStore);
 
