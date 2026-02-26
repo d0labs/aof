@@ -13,7 +13,7 @@
 import type { Task, TaskStatus } from "../schemas/task.js";
 import type { ITaskStore } from "../store/interfaces.js";
 import type { EventLogger } from "../events/logger.js";
-import type { DispatchExecutor } from "./executor.js";
+import type { GatewayAdapter } from "./executor.js";
 import { isLeaseActive } from "./lease-manager.js";
 import { checkThrottle, updateThrottleState } from "./throttle.js";
 import { loadOrgChart } from "../org/loader.js";
@@ -25,7 +25,7 @@ export interface DispatchConfig {
   dryRun: boolean;
   defaultLeaseTtlMs: number;
   spawnTimeoutMs?: number;
-  executor?: DispatchExecutor;
+  executor?: GatewayAdapter;
   maxConcurrentDispatches?: number;
   minDispatchIntervalMs?: number;
   maxDispatchesPerPoll?: number;

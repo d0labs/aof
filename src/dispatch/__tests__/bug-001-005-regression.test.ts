@@ -13,20 +13,20 @@ import { FilesystemTaskStore } from "../../store/task-store.js";
 import type { ITaskStore } from "../../store/interfaces.js";
 import { EventLogger } from "../../events/logger.js";
 import { poll } from "../scheduler.js";
-import { MockExecutor } from "../executor.js";
+import { MockAdapter } from "../executor.js";
 
 describe("BUG-001: Scheduler Infinite Loop — Tasks Never Dispatch", () => {
   let tmpDir: string;
   let store: ITaskStore;
   let logger: EventLogger;
-  let executor: MockExecutor;
+  let executor: MockAdapter;
 
   beforeEach(async () => {
     tmpDir = await mkdtemp(join(tmpdir(), "bug001-test-"));
     store = new FilesystemTaskStore(tmpDir);
     await store.init();
     logger = new EventLogger(join(tmpDir, "events"));
-    executor = new MockExecutor();
+    executor = new MockAdapter();
   });
 
   afterEach(async () => {
@@ -137,14 +137,14 @@ describe("BUG-002: Missing Dispatch Events", () => {
   let tmpDir: string;
   let store: ITaskStore;
   let logger: EventLogger;
-  let executor: MockExecutor;
+  let executor: MockAdapter;
 
   beforeEach(async () => {
     tmpDir = await mkdtemp(join(tmpdir(), "bug002-test-"));
     store = new FilesystemTaskStore(tmpDir);
     await store.init();
     logger = new EventLogger(join(tmpDir, "events"));
-    executor = new MockExecutor();
+    executor = new MockAdapter();
   });
 
   afterEach(async () => {
@@ -241,14 +241,14 @@ describe("BUG-003: Misleading Scheduler Metrics", () => {
   let tmpDir: string;
   let store: ITaskStore;
   let logger: EventLogger;
-  let executor: MockExecutor;
+  let executor: MockAdapter;
 
   beforeEach(async () => {
     tmpDir = await mkdtemp(join(tmpdir(), "bug003-test-"));
     store = new FilesystemTaskStore(tmpDir);
     await store.init();
     logger = new EventLogger(join(tmpDir, "events"));
-    executor = new MockExecutor();
+    executor = new MockAdapter();
   });
 
   afterEach(async () => {
@@ -347,14 +347,14 @@ describe("BUG-005: Zero In-Progress Tasks During Active Polling", () => {
   let tmpDir: string;
   let store: ITaskStore;
   let logger: EventLogger;
-  let executor: MockExecutor;
+  let executor: MockAdapter;
 
   beforeEach(async () => {
     tmpDir = await mkdtemp(join(tmpdir(), "bug005-test-"));
     store = new FilesystemTaskStore(tmpDir);
     await store.init();
     logger = new EventLogger(join(tmpDir, "events"));
-    executor = new MockExecutor();
+    executor = new MockAdapter();
   });
 
   afterEach(async () => {

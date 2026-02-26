@@ -142,7 +142,7 @@ export async function executeAssignAction(
     }
 
     // Spawn agent session
-    const result = await config.executor.spawn(context, {
+    const result = await config.executor.spawnSession(context, {
       timeoutMs: config.spawnTimeoutMs ?? 30_000,
     });
 

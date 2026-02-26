@@ -13,14 +13,14 @@ import { FilesystemTaskStore } from "../../store/task-store.js";
 import type { ITaskStore } from "../../store/interfaces.js";
 import { EventLogger } from "../../events/logger.js";
 import { poll } from "../scheduler.js";
-import { MockExecutor } from "../executor.js";
+import { MockAdapter } from "../executor.js";
 import type { BaseEvent } from "../../schemas/event.js";
 
 describe("BUG-002: Scheduler Log/Event Mismatch (P2)", () => {
   let tmpDir: string;
   let store: ITaskStore;
   let logger: EventLogger;
-  let executor: MockExecutor;
+  let executor: MockAdapter;
   let events: BaseEvent[];
 
   beforeEach(async () => {
@@ -34,7 +34,7 @@ describe("BUG-002: Scheduler Log/Event Mismatch (P2)", () => {
     store = new FilesystemTaskStore(tmpDir, { logger });
     await store.init();
 
-    executor = new MockExecutor();
+    executor = new MockAdapter();
   });
 
   afterEach(async () => {
@@ -155,8 +155,8 @@ describe("BUG-002: Scheduler Log/Event Mismatch (P2)", () => {
     });
     await store.transition(task2.frontmatter.id, "ready");
 
-    const failExecutor = new MockExecutor();
-    failExecutor.spawn = vi.fn().mockImplementation(async (context) => {
+    const failExecutor = new MockAdapter();
+    failExecutor.spawnSession = vi.fn().mockImplementation(async (context) => {
       if (context.agent === "agent-2") {
         return { success: false, error: "Failed" };
       }
@@ -245,8 +245,8 @@ describe("BUG-002: Scheduler Log/Event Mismatch (P2)", () => {
     });
     await store.transition(failTask.frontmatter.id, "ready");
 
-    const customExecutor = new MockExecutor();
-    customExecutor.spawn = vi.fn().mockImplementation(async (context) => {
+    const customExecutor = new MockAdapter();
+    customExecutor.spawnSession = vi.fn().mockImplementation(async (context) => {
       if (context.agent === "fail-agent") {
         return { success: false, error: "Agent unavailable" };
       }

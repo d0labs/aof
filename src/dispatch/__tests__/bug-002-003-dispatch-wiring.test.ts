@@ -16,14 +16,14 @@ import { FilesystemTaskStore } from "../../store/task-store.js";
 import type { ITaskStore } from "../../store/interfaces.js";
 import { EventLogger } from "../../events/logger.js";
 import { poll } from "../scheduler.js";
-import { MockExecutor } from "../executor.js";
+import { MockAdapter } from "../executor.js";
 import type { BaseEvent } from "../../schemas/event.js";
 
 describe("BUG-002: Task Execution Blocked (P0)", () => {
   let tmpDir: string;
   let store: ITaskStore;
   let logger: EventLogger;
-  let executor: MockExecutor;
+  let executor: MockAdapter;
   let events: BaseEvent[];
 
   beforeEach(async () => {
@@ -37,7 +37,7 @@ describe("BUG-002: Task Execution Blocked (P0)", () => {
     store = new FilesystemTaskStore(tmpDir, { logger });
     await store.init();
     
-    executor = new MockExecutor();
+    executor = new MockAdapter();
   });
 
   afterEach(async () => {
@@ -203,7 +203,7 @@ describe("BUG-003: Silent Failure - No Error Logs (P0)", () => {
   let tmpDir: string;
   let store: ITaskStore;
   let logger: EventLogger;
-  let executor: MockExecutor;
+  let executor: MockAdapter;
   let events: BaseEvent[];
 
   beforeEach(async () => {
@@ -217,7 +217,7 @@ describe("BUG-003: Silent Failure - No Error Logs (P0)", () => {
     store = new FilesystemTaskStore(tmpDir, { logger });
     await store.init();
 
-    executor = new MockExecutor();
+    executor = new MockAdapter();
   });
 
   afterEach(async () => {
@@ -272,8 +272,8 @@ describe("BUG-003: Silent Failure - No Error Logs (P0)", () => {
 
     // First succeeds, second fails
     let callCount = 0;
-    const originalSpawn = executor.spawn.bind(executor);
-    executor.spawn = vi.fn(async (context, opts) => {
+    const originalSpawn = executor.spawnSession.bind(executor);
+    executor.spawnSession = vi.fn(async (context, opts) => {
       callCount++;
       if (callCount === 2) {
         throw new Error("Second spawn fails");

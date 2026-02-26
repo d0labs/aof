@@ -6,7 +6,7 @@ import { FilesystemTaskStore } from "../../store/task-store.js";
 import type { ITaskStore } from "../../store/interfaces.js";
 import { EventLogger } from "../../events/logger.js";
 import { poll } from "../scheduler.js";
-import type { DispatchExecutor, ExecutorResult, TaskContext } from "../executor.js";
+import type { GatewayAdapter, SpawnResult, TaskContext } from "../executor.js";
 
 describe("Scheduler - Adaptive Concurrency", () => {
   let tmpDir: string;
@@ -50,8 +50,8 @@ describe("Scheduler - Adaptive Concurrency", () => {
 
     // Mock executor that returns platform limit error
     let callCount = 0;
-    const mockExecutor: DispatchExecutor = {
-      async spawn(_context: TaskContext): Promise<ExecutorResult> {
+    const mockExecutor: GatewayAdapter = {
+      async spawnSession(_context: TaskContext): Promise<SpawnResult> {
         callCount++;
         return {
           success: false,
@@ -59,6 +59,8 @@ describe("Scheduler - Adaptive Concurrency", () => {
           platformLimit: 1, // Platform limit is 1
         };
       },
+      getSessionStatus: async (sid) => ({ sessionId: sid, alive: false }),
+      forceCompleteSession: async () => {},
     };
 
     // First poll should detect platform limit and adjust cap
@@ -106,8 +108,8 @@ describe("Scheduler - Adaptive Concurrency", () => {
     }
 
     let callCount = 0;
-    const mockExecutor: DispatchExecutor = {
-      async spawn(_context: TaskContext): Promise<ExecutorResult> {
+    const mockExecutor: GatewayAdapter = {
+      async spawnSession(_context: TaskContext): Promise<SpawnResult> {
         callCount++;
         // First call: platform limit error
         if (callCount === 1) {
@@ -146,14 +148,16 @@ describe("Scheduler - Adaptive Concurrency", () => {
     });
     await store.transition(task.frontmatter.id, "ready");
 
-    const mockExecutor: DispatchExecutor = {
-      async spawn(_context: TaskContext): Promise<ExecutorResult> {
+    const mockExecutor: GatewayAdapter = {
+      async spawnSession(_context: TaskContext): Promise<SpawnResult> {
         return {
           success: false,
           error: "sessions_spawn has reached max active children for this session (5/5)",
           platformLimit: 5, // Platform allows 5
         };
       },
+      getSessionStatus: async (sid) => ({ sessionId: sid, alive: false }),
+      forceCompleteSession: async () => {},
     };
 
     // Config allows only 2, platform allows 5
@@ -181,14 +185,16 @@ describe("Scheduler - Adaptive Concurrency", () => {
     });
     await store.transition(task.frontmatter.id, "ready");
 
-    const mockExecutor: DispatchExecutor = {
-      async spawn(_context: TaskContext): Promise<ExecutorResult> {
+    const mockExecutor: GatewayAdapter = {
+      async spawnSession(_context: TaskContext): Promise<SpawnResult> {
         return {
           success: false,
           error: "sessions_spawn has reached max active children for this session (1/1)",
           platformLimit: 1,
         };
       },
+      getSessionStatus: async (sid) => ({ sessionId: sid, alive: false }),
+      forceCompleteSession: async () => {},
     };
 
     // Poll multiple times
@@ -218,14 +224,16 @@ describe("Scheduler - Adaptive Concurrency", () => {
     });
     await store.transition(task.frontmatter.id, "ready");
 
-    const mockExecutor: DispatchExecutor = {
-      async spawn(_context: TaskContext): Promise<ExecutorResult> {
+    const mockExecutor: GatewayAdapter = {
+      async spawnSession(_context: TaskContext): Promise<SpawnResult> {
         return {
           success: false,
           error: "sessions_spawn has reached max active children for this session (1/1)",
           platformLimit: 1,
         };
       },
+      getSessionStatus: async (sid) => ({ sessionId: sid, alive: false }),
+      forceCompleteSession: async () => {},
     };
 
     await poll(store, logger, {
@@ -253,13 +261,15 @@ describe("Scheduler - Adaptive Concurrency", () => {
     });
     await store.transition(permTask.frontmatter.id, "ready");
 
-    const permExecutor: DispatchExecutor = {
-      async spawn(_context: TaskContext): Promise<ExecutorResult> {
+    const permExecutor: GatewayAdapter = {
+      async spawnSession(_context: TaskContext): Promise<SpawnResult> {
         return {
           success: false,
           error: "Agent not found",
         };
       },
+      getSessionStatus: async (sid) => ({ sessionId: sid, alive: false }),
+      forceCompleteSession: async () => {},
     };
 
     await poll(store, logger, {
@@ -284,13 +294,15 @@ describe("Scheduler - Adaptive Concurrency", () => {
     });
     await store.transition(transTask.frontmatter.id, "ready");
 
-    const transExecutor: DispatchExecutor = {
-      async spawn(_context: TaskContext): Promise<ExecutorResult> {
+    const transExecutor: GatewayAdapter = {
+      async spawnSession(_context: TaskContext): Promise<SpawnResult> {
         return {
           success: false,
           error: "gateway timeout",
         };
       },
+      getSessionStatus: async (sid) => ({ sessionId: sid, alive: false }),
+      forceCompleteSession: async () => {},
     };
 
     await poll(store, logger, {

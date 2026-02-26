@@ -11,19 +11,25 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { stringify as stringifyYaml } from "yaml";
 import { AOFService } from "../aof-service.js";
-import type { DispatchExecutor, TaskContext, ExecutorResult } from "../../dispatch/executor.js";
+import type { GatewayAdapter, TaskContext, SpawnResult } from "../../dispatch/executor.js";
 import { FilesystemTaskStore } from "../../store/task-store.js";
 
-class TestExecutor implements DispatchExecutor {
+class TestExecutor implements GatewayAdapter {
   readonly spawned: TaskContext[] = [];
 
-  async spawn(context: TaskContext): Promise<ExecutorResult> {
+  async spawnSession(context: TaskContext): Promise<SpawnResult> {
     this.spawned.push(context);
     return {
       success: true,
       sessionId: `session-${context.taskId}`,
     };
   }
+
+  async getSessionStatus(sessionId: string) {
+    return { sessionId, alive: false };
+  }
+
+  async forceCompleteSession(_sessionId: string) {}
 
   clear(): void {
     this.spawned.length = 0;

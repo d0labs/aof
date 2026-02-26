@@ -3,4 +3,4 @@
  * (Deduplication: single source of truth)
  */
 
-export { OpenClawExecutor } from "./openclaw-executor.js";
+export { OpenClawAdapter, OpenClawExecutor } from "./openclaw-executor.js";

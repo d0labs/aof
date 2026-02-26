@@ -12,7 +12,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { FilesystemTaskStore } from "../../../src/store/task-store.js";
 import type { ITaskStore } from "../../../src/store/interfaces.js";
 import { aofDispatch, type DispatchResult } from "../../../src/dispatch/aof-dispatch.js";
-import type { DispatchExecutor } from "../../../src/dispatch/executor.js";
+import type { GatewayAdapter } from "../../../src/dispatch/executor.js";
 import { seedTestData, cleanupTestData } from "../utils/test-data.js";
 import { join } from "node:path";
 import { homedir } from "node:os";
@@ -21,29 +21,35 @@ import { mkdir, writeFile } from "node:fs/promises";
 const TEST_DATA_DIR = join(homedir(), ".openclaw-aof-e2e-test", "dispatch-flow");
 
 /**
- * Mock DispatchExecutor for testing dispatch flow without actual agent spawning.
+ * Mock GatewayAdapter for testing dispatch flow without actual agent spawning.
  */
-class MockDispatchExecutor implements DispatchExecutor {
+class MockDispatchAdapter implements GatewayAdapter {
   public lastSpawnOptions: any = null;
 
-  async spawn(options: any): Promise<{ success: boolean; sessionId?: string; error?: string }> {
+  async spawnSession(options: any): Promise<{ success: boolean; sessionId?: string; error?: string }> {
     this.lastSpawnOptions = options;
     return {
       success: true,
       sessionId: `mock-session-${Date.now()}`,
     };
   }
+
+  async getSessionStatus(sessionId: string) {
+    return { sessionId, alive: false };
+  }
+
+  async forceCompleteSession(_sessionId: string) {}
 }
 
 describe("E2E: Dispatch Flow", () => {
   let store: ITaskStore;
-  let executor: MockDispatchExecutor;
+  let executor: MockDispatchAdapter;
 
   beforeEach(async () => {
     await cleanupTestData(TEST_DATA_DIR);
     await seedTestData(TEST_DATA_DIR);
     store = new FilesystemTaskStore(TEST_DATA_DIR);
-    executor = new MockDispatchExecutor();
+    executor = new MockDispatchAdapter();
   });
 
   afterEach(async () => {
@@ -388,13 +394,15 @@ describe("E2E: Dispatch Flow", () => {
     });
 
     it("should return error when executor spawn fails", async () => {
-      const failingExecutor: DispatchExecutor = {
-        async spawn() {
+      const failingExecutor: GatewayAdapter = {
+        async spawnSession() {
           return {
             success: false,
             error: "Mock spawn failure",
           };
         },
+        async getSessionStatus(sid) { return { sessionId: sid, alive: false }; },
+        async forceCompleteSession() {},
       };
 
       const task = await store.create({

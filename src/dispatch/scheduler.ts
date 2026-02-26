@@ -16,7 +16,7 @@ import { join, relative } from "node:path";
 import { readFile, access } from "node:fs/promises";
 import { parse as parseYaml } from "yaml";
 import writeFileAtomic from "write-file-atomic";
-import type { DispatchExecutor, TaskContext } from "./executor.js";
+import type { GatewayAdapter, TaskContext } from "./executor.js";
 import type { Task, TaskStatus } from "../schemas/task.js";
 import { evaluateGateTransition, type GateEvaluationInput, type GateEvaluationResult } from "./gate-evaluator.js";
 import { validateWorkflow, type WorkflowConfig } from "../schemas/workflow.js";
@@ -44,7 +44,7 @@ export interface SchedulerConfig {
   /** Heartbeat TTL in ms (default 5min). */
   heartbeatTtlMs?: number;
   /** Executor for spawning agent sessions (optional — if absent, assign actions are logged only). */
-  executor?: DispatchExecutor;
+  executor?: GatewayAdapter;
   /** Spawn timeout in ms (default 30s). */
   spawnTimeoutMs?: number;
   /** SLA checker instance (optional — created if not provided). */

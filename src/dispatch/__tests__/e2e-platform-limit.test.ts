@@ -6,7 +6,7 @@ import { FilesystemTaskStore } from "../../store/task-store.js";
 import type { ITaskStore } from "../../store/interfaces.js";
 import { EventLogger } from "../../events/logger.js";
 import { poll } from "../scheduler.js";
-import type { DispatchExecutor, ExecutorResult, TaskContext } from "../executor.js";
+import type { GatewayAdapter, SpawnResult, TaskContext } from "../executor.js";
 
 describe("E2E - Platform Limit Detection", () => {
   let tmpDir: string;
@@ -44,8 +44,8 @@ describe("E2E - Platform Limit Detection", () => {
     let activeDispatches = 0;
     const dispatched: string[] = [];
     
-    const mockExecutor: DispatchExecutor = {
-      async spawn(context: TaskContext): Promise<ExecutorResult> {
+    const mockExecutor: GatewayAdapter = {
+      async spawnSession(context: TaskContext): Promise<SpawnResult> {
         // Platform allows only 1 active dispatch
         if (activeDispatches >= 1) {
           return {
@@ -128,8 +128,8 @@ describe("E2E - Platform Limit Detection", () => {
     const completed: string[] = [];
     const PLATFORM_LIMIT = 2; // Platform allows 2 concurrent dispatches
     
-    const mockExecutor: DispatchExecutor = {
-      async spawn(context: TaskContext): Promise<ExecutorResult> {
+    const mockExecutor: GatewayAdapter = {
+      async spawnSession(context: TaskContext): Promise<SpawnResult> {
         // Platform allows only 2 active dispatches
         if (activeDispatches.size >= PLATFORM_LIMIT) {
           return {

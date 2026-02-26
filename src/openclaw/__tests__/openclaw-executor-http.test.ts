@@ -1,5 +1,5 @@
 /**
- * Tests for embedded agent dispatch in OpenClawExecutor
+ * Tests for embedded agent dispatch in OpenClawAdapter
  *
  * The executor uses fire-and-forget: spawn() returns immediately with
  * { success: true, sessionId } after launching the agent in the background.
@@ -8,7 +8,7 @@
  */
 
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import { OpenClawExecutor } from "../openclaw-executor.js";
+import { OpenClawAdapter } from "../openclaw-executor.js";
 import type { OpenClawApi } from "../types.js";
 import type { TaskContext } from "../../dispatch/executor.js";
 
@@ -27,9 +27,9 @@ vi.mock("node:crypto", async (importOriginal) => {
   };
 });
 
-describe("OpenClawExecutor (embedded agent)", () => {
+describe("OpenClawAdapter (embedded agent)", () => {
   let mockApi: OpenClawApi;
-  let executor: OpenClawExecutor;
+  let executor: OpenClawAdapter;
   let taskContext: TaskContext;
 
   beforeEach(() => {
@@ -49,7 +49,7 @@ describe("OpenClawExecutor (embedded agent)", () => {
       routing: { team: "engineering" },
     };
 
-    executor = new OpenClawExecutor(mockApi);
+    executor = new OpenClawAdapter(mockApi);
 
     // Inject the mock extensionAPI (bypass lazy loading)
     (executor as any).extensionApi = {
@@ -70,7 +70,7 @@ describe("OpenClawExecutor (embedded agent)", () => {
       },
     });
 
-    const result = await executor.spawn(taskContext);
+    const result = await executor.spawnSession(taskContext);
 
     // Fire-and-forget: returns immediately with the generated sessionId
     expect(result).toEqual({
@@ -101,7 +101,7 @@ describe("OpenClawExecutor (embedded agent)", () => {
       meta: { durationMs: 1000, agentMeta: { sessionId: "s1", provider: "a", model: "m" } },
     });
 
-    await executor.spawn({ ...taskContext, thinking: "medium" });
+    await executor.spawnSession({ ...taskContext, thinking: "medium" });
     await vi.waitFor(() => expect(mockRunEmbeddedPiAgent).toHaveBeenCalledTimes(1));
 
     const params = mockRunEmbeddedPiAgent.mock.calls[0][0];
@@ -118,7 +118,7 @@ describe("OpenClawExecutor (embedded agent)", () => {
       },
     });
 
-    const result = await executor.spawn(taskContext);
+    const result = await executor.spawnSession(taskContext);
 
     // Spawn returns success (fire-and-forget)
     expect(result.success).toBe(true);
@@ -137,7 +137,7 @@ describe("OpenClawExecutor (embedded agent)", () => {
       meta: { durationMs: 1000, aborted: true },
     });
 
-    const result = await executor.spawn(taskContext);
+    const result = await executor.spawnSession(taskContext);
 
     expect(result.success).toBe(true);
 
@@ -152,7 +152,7 @@ describe("OpenClawExecutor (embedded agent)", () => {
     const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
     mockRunEmbeddedPiAgent.mockRejectedValueOnce(new Error("Runtime crash"));
 
-    const result = await executor.spawn(taskContext);
+    const result = await executor.spawnSession(taskContext);
 
     expect(result.success).toBe(true);
 
@@ -165,10 +165,10 @@ describe("OpenClawExecutor (embedded agent)", () => {
 
   it("returns error when api.config is missing", async () => {
     const noConfigApi = {} as unknown as OpenClawApi;
-    const exec = new OpenClawExecutor(noConfigApi);
+    const exec = new OpenClawAdapter(noConfigApi);
     (exec as any).extensionApi = (executor as any).extensionApi;
 
-    const result = await exec.spawn(taskContext);
+    const result = await exec.spawnSession(taskContext);
 
     expect(result.success).toBe(false);
     expect(result.error).toContain("No OpenClaw config");
@@ -179,7 +179,7 @@ describe("OpenClawExecutor (embedded agent)", () => {
       meta: { durationMs: 1000, agentMeta: { sessionId: "s2", provider: "a", model: "m" } },
     });
 
-    await executor.spawn({ ...taskContext, agent: "agent:swe-backend:main" });
+    await executor.spawnSession({ ...taskContext, agent: "agent:swe-backend:main" });
     await vi.waitFor(() => expect(mockRunEmbeddedPiAgent).toHaveBeenCalledTimes(1));
 
     const params = mockRunEmbeddedPiAgent.mock.calls[0][0];
@@ -191,7 +191,7 @@ describe("OpenClawExecutor (embedded agent)", () => {
       meta: { durationMs: 1000, agentMeta: { sessionId: "s3", provider: "a", model: "m" } },
     });
 
-    await executor.spawn({
+    await executor.spawnSession({
       ...taskContext,
       projectId: "my-project",
       projectRoot: "/home/user/my-project",
@@ -210,7 +210,7 @@ describe("OpenClawExecutor (embedded agent)", () => {
       meta: { durationMs: 1000, agentMeta: { sessionId: "s4", provider: "a", model: "m" } },
     });
 
-    await executor.spawn(taskContext, { timeoutMs: 60_000 });
+    await executor.spawnSession(taskContext, { timeoutMs: 60_000 });
     await vi.waitFor(() => expect(mockRunEmbeddedPiAgent).toHaveBeenCalledTimes(1));
 
     const params = mockRunEmbeddedPiAgent.mock.calls[0][0];
@@ -222,7 +222,7 @@ describe("OpenClawExecutor (embedded agent)", () => {
       meta: { durationMs: 1000 },
     });
 
-    const result = await executor.spawn(taskContext);
+    const result = await executor.spawnSession(taskContext);
 
     expect(result.success).toBe(true);
     expect(result.sessionId).toBe("test-uuid-1234");
@@ -231,7 +231,7 @@ describe("OpenClawExecutor (embedded agent)", () => {
   it("returns setup failure when ensureAgentWorkspace throws", async () => {
     mockEnsureAgentWorkspace.mockRejectedValueOnce(new Error("Disk full"));
 
-    const result = await executor.spawn(taskContext);
+    const result = await executor.spawnSession(taskContext);
 
     expect(result.success).toBe(false);
     expect(result.error).toContain("Disk full");

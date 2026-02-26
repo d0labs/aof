@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import { OpenClawExecutor } from "../executor.js";
+import { OpenClawAdapter } from "../executor.js";
 import type { OpenClawApi } from "../types.js";
 import type { TaskContext } from "../../dispatch/executor.js";
 
@@ -12,14 +12,14 @@ const mockExtApi = {
   resolveSessionFilePath: vi.fn((id: string) => `/tmp/s/${id}.jsonl`),
 };
 
-describe("OpenClawExecutor", () => {
+describe("OpenClawAdapter", () => {
   let mockApi: OpenClawApi;
-  let executor: OpenClawExecutor;
+  let executor: OpenClawAdapter;
 
   beforeEach(() => {
     vi.clearAllMocks();
     mockApi = { config: { agents: {} } } as unknown as OpenClawApi;
-    executor = new OpenClawExecutor(mockApi);
+    executor = new OpenClawAdapter(mockApi);
     (executor as any).extensionApi = mockExtApi;
   });
 
@@ -36,7 +36,7 @@ describe("OpenClawExecutor", () => {
       routing: { role: "backend-engineer" },
     };
 
-    const result = await executor.spawn(context);
+    const result = await executor.spawnSession(context);
 
     expect(result.success).toBe(true);
     expect(result.sessionId).toBe("session-12345");
@@ -61,7 +61,7 @@ describe("OpenClawExecutor", () => {
       routing: {},
     };
 
-    const result = await executor.spawn(context);
+    const result = await executor.spawnSession(context);
 
     expect(result.success).toBe(false);
     expect(result.error).toContain("Agent not found");
@@ -80,7 +80,7 @@ describe("OpenClawExecutor", () => {
       routing: {},
     };
 
-    await executor.spawn(context, { timeoutMs: 60000 });
+    await executor.spawnSession(context, { timeoutMs: 60000 });
 
     expect(mockRunEmbeddedPiAgent).toHaveBeenCalledWith(
       expect.objectContaining({ timeoutMs: 60000 }),
@@ -100,7 +100,7 @@ describe("OpenClawExecutor", () => {
       routing: { role: "frontend-engineer", team: "swe", tags: ["ui", "react"] },
     };
 
-    await executor.spawn(context);
+    await executor.spawnSession(context);
 
     const params = mockRunEmbeddedPiAgent.mock.calls[0][0];
     expect(params.prompt).toContain("frontend-engineer");
@@ -117,7 +117,7 @@ describe("OpenClawExecutor", () => {
       routing: {},
     };
 
-    const result = await executor.spawn(context);
+    const result = await executor.spawnSession(context);
 
     expect(result.success).toBe(false);
     expect(result.error).toContain("Network error");
@@ -136,7 +136,7 @@ describe("OpenClawExecutor", () => {
       routing: {},
     };
 
-    await executor.spawn(context);
+    await executor.spawnSession(context);
 
     const params = mockRunEmbeddedPiAgent.mock.calls[0][0];
     expect(params.prompt).toContain("aof_task_complete");
@@ -156,7 +156,7 @@ describe("OpenClawExecutor", () => {
       routing: {},
     };
 
-    await executor.spawn(context);
+    await executor.spawnSession(context);
 
     expect(mockRunEmbeddedPiAgent).toHaveBeenCalledWith(
       expect.objectContaining({ agentId: "swe-backend" }),
@@ -165,10 +165,10 @@ describe("OpenClawExecutor", () => {
 
   it("handles missing config gracefully", async () => {
     const noConfigApi = {} as unknown as OpenClawApi;
-    const exec = new OpenClawExecutor(noConfigApi);
+    const exec = new OpenClawAdapter(noConfigApi);
     (exec as any).extensionApi = mockExtApi;
 
-    const result = await exec.spawn({
+    const result = await exec.spawnSession({
       taskId: "TASK-008",
       taskPath: "/path/to/task.md",
       agent: "swe-backend",

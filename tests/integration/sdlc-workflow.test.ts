@@ -42,7 +42,7 @@ import { tmpdir } from "node:os";
 import { FilesystemTaskStore } from "../../src/store/task-store.js";
 import type { ITaskStore } from "../../src/store/interfaces.js";
 import { EventLogger } from "../../src/events/logger.js";
-import { MockExecutor } from "../../src/dispatch/executor.js";
+import { MockAdapter } from "../../src/dispatch/executor.js";
 import { ProtocolRouter } from "../../src/protocol/router.js";
 import { poll, resetThrottleState } from "../../src/dispatch/scheduler.js";
 import type { Task } from "../../src/schemas/task.js";
@@ -62,7 +62,7 @@ describe("SDLC Workflow Integration — lifecycle enforcement", () => {
   let tmpDir: string;
   let store: ITaskStore;
   let logger: EventLogger;
-  let executor: MockExecutor;
+  let executor: MockAdapter;
   let router: ProtocolRouter;
 
   beforeEach(async () => {
@@ -74,7 +74,7 @@ describe("SDLC Workflow Integration — lifecycle enforcement", () => {
     await mkdir(eventsDir, { recursive: true });
     logger = new EventLogger(eventsDir);
 
-    executor = new MockExecutor();
+    executor = new MockAdapter();
     router = new ProtocolRouter({ store, logger });
     resetThrottleState();
 

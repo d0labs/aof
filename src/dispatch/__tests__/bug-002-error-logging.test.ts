@@ -13,14 +13,14 @@ import { FilesystemTaskStore } from "../../store/task-store.js";
 import type { ITaskStore } from "../../store/interfaces.js";
 import { EventLogger } from "../../events/logger.js";
 import { poll } from "../scheduler.js";
-import { MockExecutor } from "../executor.js";
+import { MockAdapter } from "../executor.js";
 import type { BaseEvent } from "../../schemas/event.js";
 
 describe("BUG-002: Error Logging for Executor Failures (P1)", () => {
   let tmpDir: string;
   let store: ITaskStore;
   let logger: EventLogger;
-  let executor: MockExecutor;
+  let executor: MockAdapter;
   let events: BaseEvent[];
 
   beforeEach(async () => {
@@ -34,7 +34,7 @@ describe("BUG-002: Error Logging for Executor Failures (P1)", () => {
     store = new FilesystemTaskStore(tmpDir, { logger });
     await store.init();
 
-    executor = new MockExecutor();
+    executor = new MockAdapter();
   });
 
   afterEach(async () => {
@@ -144,7 +144,7 @@ describe("BUG-002: Error Logging for Executor Failures (P1)", () => {
     });
     await store.transition(task.frontmatter.id, "ready");
 
-    executor.spawn = vi.fn().mockRejectedValue(new Error("Spawn exception with stack"));
+    executor.spawnSession = vi.fn().mockRejectedValue(new Error("Spawn exception with stack"));
 
     await poll(store, logger, {
       dataDir: tmpDir,

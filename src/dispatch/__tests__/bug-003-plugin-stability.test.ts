@@ -13,14 +13,14 @@ import { FilesystemTaskStore } from "../../store/task-store.js";
 import type { ITaskStore } from "../../store/interfaces.js";
 import { EventLogger } from "../../events/logger.js";
 import { poll } from "../scheduler.js";
-import { MockExecutor } from "../executor.js";
+import { MockAdapter } from "../executor.js";
 import type { BaseEvent } from "../../schemas/event.js";
 
 describe("BUG-003: Plugin Stability - Error Handling", () => {
   let tmpDir: string;
   let store: ITaskStore;
   let logger: EventLogger;
-  let executor: MockExecutor;
+  let executor: MockAdapter;
   let events: BaseEvent[];
 
   beforeEach(async () => {
@@ -34,7 +34,7 @@ describe("BUG-003: Plugin Stability - Error Handling", () => {
     store = new FilesystemTaskStore(tmpDir, { logger });
     await store.init();
     
-    executor = new MockExecutor();
+    executor = new MockAdapter();
   });
 
   afterEach(async () => {
@@ -104,8 +104,8 @@ describe("BUG-003: Plugin Stability - Error Handling", () => {
 
     // First spawn succeeds, second fails
     let spawnCount = 0;
-    const originalSpawn = executor.spawn.bind(executor);
-    executor.spawn = vi.fn(async (context, opts) => {
+    const originalSpawn = executor.spawnSession.bind(executor);
+    executor.spawnSession = vi.fn(async (context, opts) => {
       spawnCount++;
       if (spawnCount === 1) {
         return originalSpawn(context, opts);
@@ -124,7 +124,7 @@ describe("BUG-003: Plugin Stability - Error Handling", () => {
 
     expect(result.actions.length).toBe(2);
     // At least one should succeed
-    expect(executor.spawn).toHaveBeenCalledTimes(2);
+    expect(executor.spawnSession).toHaveBeenCalledTimes(2);
   });
 
   it("BUG-003: scheduler loop does not throw unhandled exceptions", async () => {

@@ -12,7 +12,7 @@ import { join } from "node:path";
 import { FilesystemTaskStore } from "../../store/task-store.js";
 import { EventLogger } from "../../events/logger.js";
 import { poll } from "../scheduler.js";
-import type { DispatchExecutor } from "../executor.js";
+import type { GatewayAdapter } from "../executor.js";
 import { MurmurStateManager } from "../../murmur/state-manager.js";
 import { stringify as stringifyYaml } from "yaml";
 import { createMurmurHook } from "../murmur-hooks.js";
@@ -87,11 +87,13 @@ describe("Murmur Scheduler Integration", () => {
 
     // Mock executor that captures dispatch calls
     const dispatched: string[] = [];
-    const mockExecutor: DispatchExecutor = {
-      spawn: async (context) => {
+    const mockExecutor: GatewayAdapter = {
+      spawnSession: async (context) => {
         dispatched.push(context.taskId);
         return { success: true, sessionId: "test-session" };
       },
+      getSessionStatus: async (sid) => ({ sessionId: sid, alive: false }),
+      forceCompleteSession: async () => {},
     };
 
     // Run scheduler poll (should evaluate murmur triggers)
@@ -149,8 +151,10 @@ describe("Murmur Scheduler Integration", () => {
     // Set murmur state to indicate review in progress
     await stateManager.startReview("backend", "existing-review", "queueEmpty");
 
-    const mockExecutor: DispatchExecutor = {
-      spawn: async () => ({ success: true, sessionId: "test-session" }),
+    const mockExecutor: GatewayAdapter = {
+      spawnSession: async () => ({ success: true, sessionId: "test-session" }),
+      getSessionStatus: async (sid) => ({ sessionId: sid, alive: false }),
+      forceCompleteSession: async () => {},
     };
 
     // Run scheduler poll
@@ -280,8 +284,10 @@ describe("Murmur Scheduler Integration", () => {
       });
     }
 
-    const mockExecutor: DispatchExecutor = {
-      spawn: async () => ({ success: true, sessionId: "test-session" }),
+    const mockExecutor: GatewayAdapter = {
+      spawnSession: async () => ({ success: true, sessionId: "test-session" }),
+      getSessionStatus: async (sid) => ({ sessionId: sid, alive: false }),
+      forceCompleteSession: async () => {},
     };
 
     // Run scheduler poll (should skip murmur due to concurrency limit)
@@ -327,8 +333,10 @@ describe("Murmur Scheduler Integration", () => {
       "utf-8"
     );
 
-    const mockExecutor: DispatchExecutor = {
-      spawn: async () => ({ success: true, sessionId: "test-session" }),
+    const mockExecutor: GatewayAdapter = {
+      spawnSession: async () => ({ success: true, sessionId: "test-session" }),
+      getSessionStatus: async (sid) => ({ sessionId: sid, alive: false }),
+      forceCompleteSession: async () => {},
     };
 
     // Run scheduler poll
@@ -388,8 +396,10 @@ describe("Murmur Scheduler Integration", () => {
     await store.transition(task.frontmatter.id, "review");
     await store.transition(task.frontmatter.id, "done");
 
-    const mockExecutor: DispatchExecutor = {
-      spawn: async () => ({ success: true, sessionId: "test-session" }),
+    const mockExecutor: GatewayAdapter = {
+      spawnSession: async () => ({ success: true, sessionId: "test-session" }),
+      getSessionStatus: async (sid) => ({ sessionId: sid, alive: false }),
+      forceCompleteSession: async () => {},
     };
 
     // Run scheduler poll

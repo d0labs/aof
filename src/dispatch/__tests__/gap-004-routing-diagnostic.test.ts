@@ -14,14 +14,14 @@ import { FilesystemTaskStore } from "../../store/task-store.js";
 import type { ITaskStore } from "../../store/interfaces.js";
 import { EventLogger } from "../../events/logger.js";
 import { poll } from "../scheduler.js";
-import { MockExecutor } from "../executor.js";
+import { MockAdapter } from "../executor.js";
 import type { BaseEvent } from "../../schemas/event.js";
 
 describe("GAP-004: Agent Resolution Diagnostic", () => {
   let tmpDir: string;
   let store: ITaskStore;
   let logger: EventLogger;
-  let executor: MockExecutor;
+  let executor: MockAdapter;
   let events: BaseEvent[];
   beforeEach(async () => {
     tmpDir = await mkdtemp(join(tmpdir(), "gap004-test-"));
@@ -34,7 +34,7 @@ describe("GAP-004: Agent Resolution Diagnostic", () => {
     store = new FilesystemTaskStore(tmpDir, { logger });
     await store.init();
 
-    executor = new MockExecutor();
+    executor = new MockAdapter();
   });
 
   afterEach(async () => {

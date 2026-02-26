@@ -7,7 +7,7 @@
 
 import type { ITaskStore } from "../store/interfaces.js";
 import type { EventLogger } from "../events/logger.js";
-import type { DispatchExecutor, TaskContext } from "./executor.js";
+import type { GatewayAdapter, TaskContext } from "./executor.js";
 import type { OrgTeam } from "../schemas/org-chart.js";
 import { MurmurStateManager } from "../murmur/state-manager.js";
 import { evaluateTriggers } from "../murmur/trigger-evaluator.js";
@@ -22,7 +22,7 @@ export interface MurmurIntegrationOptions {
   /** Event logger for murmur events. */
   logger: EventLogger;
   /** Executor for dispatching review tasks (optional, dry-run if absent). */
-  executor?: DispatchExecutor;
+  executor?: GatewayAdapter;
   /** State manager for murmur state persistence. */
   stateManager?: MurmurStateManager;
   /** Dry-run mode: log decisions but don't mutate state. */
@@ -278,7 +278,7 @@ export async function evaluateMurmurTriggers(
         };
 
         // Spawn agent session
-        const spawnResult = await executor.spawn(context, {
+        const spawnResult = await executor.spawnSession(context, {
           timeoutMs: spawnTimeoutMs,
         });
 

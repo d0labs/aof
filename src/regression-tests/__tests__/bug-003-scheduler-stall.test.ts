@@ -22,7 +22,7 @@ import type { ITaskStore } from "../../store/interfaces.js";
 import { EventLogger } from "../../events/logger.js";
 import type { BaseEvent } from "../../schemas/event.js";
 import { poll } from "../../dispatch/scheduler.js";
-import { MockExecutor } from "../../dispatch/executor.js";
+import { MockAdapter } from "../../dispatch/executor.js";
 
 describe("BUG-003: Scheduler stall (ready → in-progress transition)", () => {
   let tmpDir: string;
@@ -71,7 +71,7 @@ describe("BUG-003: Scheduler stall (ready → in-progress transition)", () => {
     capturedEvents.length = 0;
     
     // Poll with active mode (dryRun: false) and executor
-    const executor = new MockExecutor();
+    const executor = new MockAdapter();
     const result = await poll(store, logger, {
       dataDir: tmpDir,
       dryRun: false,
@@ -115,7 +115,7 @@ describe("BUG-003: Scheduler stall (ready → in-progress transition)", () => {
     await store.transition(task.frontmatter.id, "ready");
     
     // Poll with active mode
-    const executor = new MockExecutor();
+    const executor = new MockAdapter();
     const result = await poll(store, logger, {
       dataDir: tmpDir,
       dryRun: false,
@@ -184,7 +184,7 @@ describe("BUG-003: Scheduler stall (ready → in-progress transition)", () => {
     // Clear events from setup (we only care about scheduler actions)
     capturedEvents.length = 0;
     
-    const executor = new MockExecutor();
+    const executor = new MockAdapter();
     const result = await poll(store, logger, {
       dataDir: tmpDir,
       dryRun: false,

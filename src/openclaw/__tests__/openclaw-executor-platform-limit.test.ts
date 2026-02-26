@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { OpenClawExecutor } from "../openclaw-executor.js";
+import { OpenClawAdapter } from "../openclaw-executor.js";
 import type { OpenClawApi } from "../types.js";
 
 const mockRunEmbeddedPiAgent = vi.fn();
@@ -11,13 +11,13 @@ const mockExtApi = {
   resolveSessionFilePath: vi.fn((id: string) => `/tmp/s/${id}.jsonl`),
 };
 
-describe("OpenClawExecutor - Platform Limit Detection", () => {
-  let executor: OpenClawExecutor;
+describe("OpenClawAdapter - Platform Limit Detection", () => {
+  let executor: OpenClawAdapter;
 
   beforeEach(() => {
     vi.clearAllMocks();
     const mockApi = { config: { agents: {} } } as unknown as OpenClawApi;
-    executor = new OpenClawExecutor(mockApi);
+    executor = new OpenClawAdapter(mockApi);
     (executor as any).extensionApi = mockExtApi;
   });
 
@@ -26,7 +26,7 @@ describe("OpenClawExecutor - Platform Limit Detection", () => {
       new Error("sessions_spawn has reached max active children for this session (3/2)"),
     );
 
-    const result = await executor.spawn({
+    const result = await executor.spawnSession({
       taskId: "test-001",
       taskPath: "/path/to/task.md",
       agent: "agent:test:main",
@@ -42,7 +42,7 @@ describe("OpenClawExecutor - Platform Limit Detection", () => {
   it("should return undefined platformLimit for non-platform-limit errors", async () => {
     mockRunEmbeddedPiAgent.mockRejectedValueOnce(new Error("Agent not found"));
 
-    const result = await executor.spawn({
+    const result = await executor.spawnSession({
       taskId: "test-002",
       taskPath: "/path/to/task.md",
       agent: "agent:nonexistent:main",
@@ -60,7 +60,7 @@ describe("OpenClawExecutor - Platform Limit Detection", () => {
       new Error("max active children for this session (10/5)"),
     );
 
-    const result = await executor.spawn({
+    const result = await executor.spawnSession({
       taskId: "test-003",
       taskPath: "/path/to/task.md",
       agent: "agent:test:main",
@@ -83,7 +83,7 @@ describe("OpenClawExecutor - Platform Limit Detection", () => {
       },
     });
 
-    const result = await executor.spawn({
+    const result = await executor.spawnSession({
       taskId: "test-004",
       taskPath: "/path/to/task.md",
       agent: "agent:test:main",

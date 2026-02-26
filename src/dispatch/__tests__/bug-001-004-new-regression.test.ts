@@ -14,14 +14,14 @@ import { FilesystemTaskStore } from "../../store/task-store.js";
 import type { ITaskStore } from "../../store/interfaces.js";
 import { EventLogger } from "../../events/logger.js";
 import { poll } from "../scheduler.js";
-import { MockExecutor } from "../executor.js";
+import { MockAdapter } from "../executor.js";
 import type { BaseEvent } from "../../schemas/event.js";
 
 describe("BUG-001: Scheduler Polls But Never Executes Ready Tasks (NEW)", () => {
   let tmpDir: string;
   let store: ITaskStore;
   let logger: EventLogger;
-  let executor: MockExecutor;
+  let executor: MockAdapter;
   let events: BaseEvent[];
 
   beforeEach(async () => {
@@ -34,7 +34,7 @@ describe("BUG-001: Scheduler Polls But Never Executes Ready Tasks (NEW)", () => 
       onEvent: (event) => events.push(event),
     });
     
-    executor = new MockExecutor();
+    executor = new MockAdapter();
   });
 
   afterEach(async () => {
@@ -196,7 +196,7 @@ describe("BUG-002: No Tasks Ever Reach In-Progress Status (NEW)", () => {
   let tmpDir: string;
   let store: ITaskStore;
   let logger: EventLogger;
-  let executor: MockExecutor;
+  let executor: MockAdapter;
   let events: BaseEvent[];
 
   beforeEach(async () => {
@@ -210,7 +210,7 @@ describe("BUG-002: No Tasks Ever Reach In-Progress Status (NEW)", () => {
     store = new FilesystemTaskStore(tmpDir, { logger });
     await store.init();
     
-    executor = new MockExecutor();
+    executor = new MockAdapter();
   });
 
   afterEach(async () => {
@@ -318,7 +318,7 @@ describe("BUG-004: Scheduler Event Logs Missing Action Metadata (NEW)", () => {
   let tmpDir: string;
   let store: ITaskStore;
   let logger: EventLogger;
-  let executor: MockExecutor;
+  let executor: MockAdapter;
   let events: BaseEvent[];
 
   beforeEach(async () => {
@@ -331,7 +331,7 @@ describe("BUG-004: Scheduler Event Logs Missing Action Metadata (NEW)", () => {
       onEvent: (event) => events.push(event),
     });
     
-    executor = new MockExecutor();
+    executor = new MockAdapter();
   });
 
   afterEach(async () => {

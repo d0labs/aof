@@ -1,19 +1,19 @@
 /**
  * aof_dispatch — high-level dispatch with context bundling.
  * 
- * Wraps DispatchExecutor with context assembly and status management.
+ * Wraps GatewayAdapter with context assembly and status management.
  * This is the recommended entry point for dispatching tasks with full context.
  */
 
 import type { ITaskStore } from "../store/interfaces.js";
-import type { DispatchExecutor } from "./executor.js";
+import type { GatewayAdapter } from "./executor.js";
 import { assembleContext, type ContextBundle, type AssembleOptions } from "../context/assembler.js";
 
 export interface AofDispatchOptions {
   taskId: string;
   agentId?: string;              // Override agent; otherwise from task routing
   store: ITaskStore;
-  executor: DispatchExecutor;
+  executor: GatewayAdapter;
   contextOpts?: AssembleOptions; // maxChars, etc.
 }
 
@@ -65,7 +65,7 @@ export async function aofDispatch(opts: AofDispatchOptions): Promise<DispatchRes
   // Step 4: Spawn agent session
   const taskPath = task.path ?? `tasks/${task.frontmatter.status}/${taskId}.md`;
   
-  const executorResult = await executor.spawn({
+  const executorResult = await executor.spawnSession({
     taskId,
     taskPath,
     agent: targetAgent,

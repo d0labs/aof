@@ -7,7 +7,9 @@ import { AOFService } from "../service/aof-service.js";
 import { NotificationPolicyEngine, DEFAULT_RULES } from "../events/notification-policy/index.js";
 import { ConsoleNotifier } from "../adapters/console-notifier.js";
 import { MatrixNotifier } from "./matrix-notifier.js";
-import { OpenClawExecutor } from "./openclaw-executor.js";
+import { OpenClawAdapter } from "./openclaw-executor.js";
+import { MockAdapter } from "../dispatch/executor.js";
+import type { GatewayAdapter } from "../dispatch/executor.js";
 import { 
   aofDispatch, 
   aofStatusReport, 
@@ -43,6 +45,24 @@ export interface AOFPluginOptions {
 }
 
 const SERVICE_NAME = "aof-scheduler";
+
+/**
+ * Resolve the appropriate GatewayAdapter based on configuration.
+ *
+ * @param api - OpenClaw API instance
+ * @param store - Task store (passed to OpenClawAdapter for heartbeat access)
+ * @returns GatewayAdapter implementation
+ */
+function resolveAdapter(api: OpenClawApi, store: ITaskStore): GatewayAdapter {
+  const config = api.config as Record<string, unknown> | undefined;
+  const adapterType = (config?.executor as Record<string, unknown>)?.adapter;
+
+  if (adapterType === "mock") {
+    return new MockAdapter();
+  }
+
+  return new OpenClawAdapter(api, store);
+}
 
 export function registerAofPlugin(api: OpenClawApi, opts: AOFPluginOptions): AOFService {
   const store = opts.store ?? new FilesystemTaskStore(opts.dataDir);
@@ -91,7 +111,7 @@ export function registerAofPlugin(api: OpenClawApi, opts: AOFPluginOptions): AOF
 
   // Create executor for agent dispatch (only when explicitly not in dry-run mode)
   const executor = opts.dryRun === false
-    ? new OpenClawExecutor(api)
+    ? resolveAdapter(api, store)
     : undefined;
 
   const service = opts.service

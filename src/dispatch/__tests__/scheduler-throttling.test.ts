@@ -23,13 +23,13 @@ import { FilesystemTaskStore } from "../../store/task-store.js";
 import type { ITaskStore } from "../../store/interfaces.js";
 import { EventLogger } from "../../events/logger.js";
 import { poll, resetThrottleState } from "../scheduler.js";
-import { MockExecutor } from "../executor.js";
+import { MockAdapter } from "../executor.js";
 
 describe("Scheduler Throttling (AOF-adf)", () => {
   let tmpDir: string;
   let store: ITaskStore;
   let logger: EventLogger;
-  let executor: MockExecutor;
+  let executor: MockAdapter;
 
   beforeEach(async () => {
     tmpDir = await mkdtemp(join(tmpdir(), "aof-throttle-test-"));
@@ -38,7 +38,7 @@ describe("Scheduler Throttling (AOF-adf)", () => {
     const eventsDir = join(tmpDir, "events");
     await mkdir(eventsDir, { recursive: true });
     logger = new EventLogger(eventsDir);
-    executor = new MockExecutor();
+    executor = new MockAdapter();
     
     // Reset global throttle state between tests
     resetThrottleState();

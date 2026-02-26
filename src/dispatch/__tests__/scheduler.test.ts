@@ -8,7 +8,7 @@ import type { ITaskStore } from "../../store/interfaces.js";
 import { EventLogger } from "../../events/logger.js";
 import { acquireLease } from "../../store/lease.js";
 import { poll } from "../scheduler.js";
-import { MockExecutor } from "../executor.js";
+import { MockAdapter } from "../executor.js";
 
 describe("Scheduler", () => {
   let tmpDir: string;
@@ -154,7 +154,7 @@ describe("Scheduler", () => {
   });
 
   it("spawns agents when executor is provided (active dispatch)", async () => {
-    const executor = new MockExecutor();
+    const executor = new MockAdapter();
     const activeConfig = {
       ...config,
       dryRun: false,
@@ -181,7 +181,7 @@ describe("Scheduler", () => {
   });
 
   it("renews leases while dispatched sessions are active", async () => {
-    const executor = new MockExecutor();
+    const executor = new MockAdapter();
     const activeConfig = {
       ...config,
       dryRun: false,
@@ -211,7 +211,7 @@ describe("Scheduler", () => {
   });
 
   it("moves task to blocked on spawn failure", async () => {
-    const executor = new MockExecutor();
+    const executor = new MockAdapter();
     executor.setShouldFail(true, "Agent unavailable");
 
     const activeConfig = {
@@ -280,7 +280,7 @@ describe("Scheduler", () => {
     });
 
     it("skips dispatch when task becomes in-progress before execution", async () => {
-      const executor = new MockExecutor();
+      const executor = new MockAdapter();
       const activeConfig = {
         ...config,
         dryRun: false,
@@ -362,7 +362,7 @@ describe("Scheduler", () => {
     });
 
     it("logs actionsExecuted > 0 in non-dryRun mode when actions are taken", async () => {
-      const executor = new MockExecutor();
+      const executor = new MockAdapter();
       const activeConfig = {
         ...config,
         dryRun: false,
@@ -422,7 +422,7 @@ describe("Scheduler", () => {
     });
 
     it("verifies end-to-end flow: task creation → scheduler poll → execution → state transition → event logging", async () => {
-      const executor = new MockExecutor();
+      const executor = new MockAdapter();
       const activeConfig = {
         ...config,
         dryRun: false,
@@ -494,7 +494,7 @@ describe("Scheduler", () => {
     });
 
     it("handles multiple ready tasks in single poll cycle", async () => {
-      const executor = new MockExecutor();
+      const executor = new MockAdapter();
       const activeConfig = {
         ...config,
         dryRun: false,
@@ -623,7 +623,7 @@ describe("Scheduler", () => {
     });
 
     it("logs warning when ready task has no eligible agent", async () => {
-      const executor = new MockExecutor();
+      const executor = new MockAdapter();
       const activeConfig = {
         ...config,
         dryRun: false,
@@ -661,7 +661,7 @@ describe("Scheduler", () => {
     });
 
     it("transitions ready task to in-progress when executor succeeds", async () => {
-      const executor = new MockExecutor();
+      const executor = new MockAdapter();
       const activeConfig = {
         ...config,
         dryRun: false,

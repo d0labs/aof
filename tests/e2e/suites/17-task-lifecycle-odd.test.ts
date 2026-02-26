@@ -19,7 +19,7 @@ import { EventLogger } from "../../../src/events/logger.js";
 import { AOFMetrics } from "../../../src/metrics/exporter.js";
 import { collectMetrics } from "../../../src/metrics/collector.js";
 import { poll } from "../../../src/dispatch/scheduler.js";
-import { MockExecutor } from "../../../src/dispatch/executor.js";
+import { MockAdapter } from "../../../src/dispatch/executor.js";
 import {
   readEventLogEntries,
   findEvents,
@@ -32,7 +32,7 @@ describe("E2E: Full task lifecycle with ODD assertions (AOF-honeycomb-006)", () 
   let tmpDir: string;
   let store: FilesystemTaskStore;
   let logger: EventLogger;
-  let executor: MockExecutor;
+  let executor: MockAdapter;
   let metrics: AOFMetrics;
   let eventsDir: string;
 
@@ -44,7 +44,7 @@ describe("E2E: Full task lifecycle with ODD assertions (AOF-honeycomb-006)", () 
     store = new FilesystemTaskStore(tmpDir, { logger });
     await store.init();
 
-    executor = new MockExecutor();
+    executor = new MockAdapter();
     metrics = new AOFMetrics();
   });
 

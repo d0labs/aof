@@ -7,7 +7,7 @@ import { FilesystemTaskStore, serializeTask } from "../../store/task-store.js";
 import type { ITaskStore } from "../../store/interfaces.js";
 import { EventLogger } from "../../events/logger.js";
 import { poll } from "../scheduler.js";
-import { MockExecutor } from "../executor.js";
+import { MockAdapter } from "../executor.js";
 import {
   classifySpawnError,
   computeRetryBackoffMs,
@@ -289,7 +289,7 @@ describe("Spawn failure recovery", () => {
 
   describe("end-to-end: no infinite retry loop", () => {
     it("task reaches deadletter after exactly maxRetries via scheduler poll", async () => {
-      const executor = new MockExecutor();
+      const executor = new MockAdapter();
       executor.setShouldFail(true, "gateway timeout");
 
       const activeConfig = {
@@ -362,7 +362,7 @@ describe("Spawn failure recovery", () => {
     });
 
     it("permanent spawn error deadletters immediately on first attempt", async () => {
-      const executor = new MockExecutor();
+      const executor = new MockAdapter();
       executor.setShouldFail(true, "Agent not found: nonexistent-agent");
 
       const activeConfig = {

@@ -2,7 +2,7 @@
  * aof_dispatch Tests
  * 
  * Tests high-level dispatch function that integrates context assembly
- * with the DispatchExecutor.
+ * with the GatewayAdapter.
  */
 
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
@@ -11,19 +11,19 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { FilesystemTaskStore } from "../../store/task-store.js";
 import type { ITaskStore } from "../../store/interfaces.js";
-import { MockExecutor } from "../executor.js";
+import { MockAdapter } from "../executor.js";
 import { aofDispatch } from "../aof-dispatch.js";
 
 describe("aof_dispatch", () => {
   let tmpDir: string;
   let store: ITaskStore;
-  let executor: MockExecutor;
+  let executor: MockAdapter;
 
   beforeEach(async () => {
     tmpDir = await mkdtemp(join(tmpdir(), "aof-dispatch-test-"));
     store = new FilesystemTaskStore(tmpDir);
     await store.init();
-    executor = new MockExecutor();
+    executor = new MockAdapter();
   });
 
   afterEach(async () => {

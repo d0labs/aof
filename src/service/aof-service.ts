@@ -42,7 +42,7 @@ export interface AOFServiceDependencies {
   /** Notification policy engine — wired to EventLogger.onEvent automatically. */
   engine?: NotificationPolicyEngine;
   poller?: typeof poll;
-  executor?: import("../dispatch/executor.js").DispatchExecutor;
+  executor?: import("../dispatch/executor.js").GatewayAdapter;
   protocolRouter?: ProtocolRouter;
 }
 

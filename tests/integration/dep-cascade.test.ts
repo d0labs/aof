@@ -22,7 +22,7 @@ import { FilesystemTaskStore } from "../../src/store/task-store.js";
 import type { ITaskStore } from "../../src/store/interfaces.js";
 import { EventLogger } from "../../src/events/logger.js";
 import { ProtocolRouter } from "../../src/protocol/router.js";
-import { MockExecutor } from "../../src/dispatch/executor.js";
+import { MockAdapter } from "../../src/dispatch/executor.js";
 import { poll, resetThrottleState } from "../../src/dispatch/scheduler.js";
 import { acquireLease } from "../../src/store/lease.js";
 import type { ProtocolEnvelope } from "../../src/schemas/protocol.js";
@@ -35,7 +35,7 @@ describe("Dependency cascade integration (AOF-cd1e)", () => {
   let tmpDir: string;
   let store: ITaskStore;
   let logger: EventLogger;
-  let executor: MockExecutor;
+  let executor: MockAdapter;
   let router: ProtocolRouter;
 
   beforeEach(async () => {
@@ -45,7 +45,7 @@ describe("Dependency cascade integration (AOF-cd1e)", () => {
     const eventsDir = join(tmpDir, "events");
     await mkdir(eventsDir, { recursive: true });
     logger = new EventLogger(eventsDir);
-    executor = new MockExecutor();
+    executor = new MockAdapter();
     router = new ProtocolRouter({ store, logger });
     resetThrottleState();
   });

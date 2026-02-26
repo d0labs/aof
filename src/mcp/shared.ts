@@ -3,14 +3,14 @@ import type { Task, TaskStatus, TaskPriority } from "../schemas/task.js";
 import { FilesystemTaskStore } from "../store/task-store.js";
 import type { ITaskStore } from "../store/interfaces.js";
 import { EventLogger } from "../events/logger.js";
-import type { DispatchExecutor } from "../dispatch/executor.js";
+import type { GatewayAdapter } from "../dispatch/executor.js";
 import { ErrorCode, McpError } from "@modelcontextprotocol/sdk/types.js";
 
 export interface AofMcpOptions {
   dataDir: string;
   store?: ITaskStore;
   logger?: EventLogger;
-  executor?: DispatchExecutor;
+  executor?: GatewayAdapter;
   orgChartPath?: string;
   /** Project ID (for project-scoped operations, defaults to _inbox). */
   projectId?: string;
@@ -22,7 +22,7 @@ export interface AofMcpContext {
   dataDir: string;
   store: ITaskStore;
   logger: EventLogger;
-  executor?: DispatchExecutor;
+  executor?: GatewayAdapter;
   orgChartPath: string;
 }
 

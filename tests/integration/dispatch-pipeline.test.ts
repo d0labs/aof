@@ -5,7 +5,7 @@
  * - FilesystemTaskStore  (temp directory per test)
  * - EventLogger
  * - ProtocolRouter
- * - MockExecutor         (mock spawnAgent — no real agent sessions)
+ * - MockAdapter         (mock spawnAgent — no real agent sessions)
  * - poll()               (real scheduler)
  *
  * These tests validate that the modules wire together correctly after
@@ -23,7 +23,7 @@ import { FilesystemTaskStore } from "../../src/store/task-store.js";
 import type { ITaskStore } from "../../src/store/interfaces.js";
 import { EventLogger } from "../../src/events/logger.js";
 import { ProtocolRouter } from "../../src/protocol/router.js";
-import { MockExecutor } from "../../src/dispatch/executor.js";
+import { MockAdapter } from "../../src/dispatch/executor.js";
 import { poll, resetThrottleState } from "../../src/dispatch/scheduler.js";
 import { acquireLease } from "../../src/store/lease.js";
 import type { ProtocolEnvelope } from "../../src/schemas/protocol.js";
@@ -36,7 +36,7 @@ describe("Dispatch pipeline integration", () => {
   let tmpDir: string;
   let store: ITaskStore;
   let logger: EventLogger;
-  let executor: MockExecutor;
+  let executor: MockAdapter;
   let router: ProtocolRouter;
 
   beforeEach(async () => {
@@ -48,7 +48,7 @@ describe("Dispatch pipeline integration", () => {
     await mkdir(eventsDir, { recursive: true });
     logger = new EventLogger(eventsDir);
 
-    executor = new MockExecutor();
+    executor = new MockAdapter();
     router = new ProtocolRouter({ store, logger });
 
     // Reset module-level throttle state between tests
@@ -173,7 +173,7 @@ describe("Dispatch pipeline integration", () => {
       expect(dispatched!.frontmatter.status).toBe("in-progress");
       expect(dispatched!.frontmatter.lease?.agent).toBe("test-agent");
 
-      // MockExecutor should have been called once
+      // MockAdapter should have been called once
       expect(executor.spawned).toHaveLength(1);
       expect(executor.spawned[0]!.context.taskId).toBe(task.frontmatter.id);
       expect(executor.spawned[0]!.context.agent).toBe("test-agent");
