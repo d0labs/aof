@@ -1,17 +1,49 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { mkdtemp, rm, mkdir, writeFile, readFile, cp } from "node:fs/promises";
+import { execSync } from "node:child_process";
+import { mkdtempSync, writeFileSync, readFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { selfUpdate, rollbackUpdate, type UpdateOptions, type UpdateHooks } from "../updater.js";
+
+/**
+ * Create a real tar.gz buffer for use in mocked fetch responses.
+ * The tarball contains a minimal package.json so extractTarball() succeeds.
+ */
+function createTestTarball(): Buffer {
+  const staging = mkdtempSync(join(tmpdir(), "aof-test-tarball-"));
+  writeFileSync(join(staging, "package.json"), '{"name":"aof","version":"0.0.0-test"}');
+  const tarPath = join(staging, "test.tar.gz");
+  execSync(`tar -czf "${tarPath}" -C "${staging}" package.json`);
+  const buf = readFileSync(tarPath);
+  execSync(`rm -rf "${staging}"`);
+  return buf;
+}
+
+function mockTarballResponse(tarballData: Buffer) {
+  const stream = new ReadableStream({
+    start(controller) {
+      controller.enqueue(new Uint8Array(tarballData));
+      controller.close();
+    },
+  });
+  return {
+    ok: true,
+    body: stream,
+    arrayBuffer: async () => tarballData.buffer,
+  };
+}
 
 describe("Self-Update Engine", () => {
   let tmpDir: string;
   let aofRoot: string;
   let mockFetch: ReturnType<typeof vi.fn>;
+  let realTarball: Buffer;
 
   beforeEach(async () => {
     tmpDir = await mkdtemp(join(tmpdir(), "aof-updater-test-"));
     aofRoot = join(tmpDir, "aof");
+    realTarball = createTestTarball();
 
     // Create AOF directory structure
     await mkdir(aofRoot, { recursive: true });
@@ -44,20 +76,7 @@ describe("Self-Update Engine", () => {
 
   describe("selfUpdate()", () => {
     it("downloads and installs new version successfully", async () => {
-      // Mock tarball response with ReadableStream body
-      const tarballData = Buffer.from("fake tarball data");
-      const stream = new ReadableStream({
-        start(controller) {
-          controller.enqueue(new Uint8Array(tarballData));
-          controller.close();
-        },
-      });
-
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        body: stream,
-        arrayBuffer: async () => tarballData.buffer,
-      });
+      mockFetch.mockResolvedValueOnce(mockTarballResponse(realTarball));
 
       const opts: UpdateOptions = {
         aofRoot,
@@ -84,19 +103,7 @@ describe("Self-Update Engine", () => {
     });
 
     it("preserves config and data during update", async () => {
-      const tarballData = Buffer.from("fake tarball data");
-      const stream = new ReadableStream({
-        start(controller) {
-          controller.enqueue(new Uint8Array(tarballData));
-          controller.close();
-        },
-      });
-
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        body: stream,
-        arrayBuffer: async () => tarballData.buffer,
-      });
+      mockFetch.mockResolvedValueOnce(mockTarballResponse(realTarball));
 
       const originalConfig = await readFile(join(aofRoot, "config", "settings.json"), "utf-8");
       const originalData = await readFile(join(aofRoot, "data", "state.json"), "utf-8");
@@ -119,19 +126,7 @@ describe("Self-Update Engine", () => {
     });
 
     it("executes pre-update hooks", async () => {
-      const tarballData = Buffer.from("fake tarball data");
-      const stream = new ReadableStream({
-        start(controller) {
-          controller.enqueue(new Uint8Array(tarballData));
-          controller.close();
-        },
-      });
-
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        body: stream,
-        arrayBuffer: async () => tarballData.buffer,
-      });
+      mockFetch.mockResolvedValueOnce(mockTarballResponse(realTarball));
 
       const preUpdateMock = vi.fn().mockResolvedValue(undefined);
       const hooks: UpdateHooks = {
@@ -155,19 +150,7 @@ describe("Self-Update Engine", () => {
     });
 
     it("executes post-update hooks", async () => {
-      const tarballData = Buffer.from("fake tarball data");
-      const stream = new ReadableStream({
-        start(controller) {
-          controller.enqueue(new Uint8Array(tarballData));
-          controller.close();
-        },
-      });
-
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        body: stream,
-        arrayBuffer: async () => tarballData.buffer,
-      });
+      mockFetch.mockResolvedValueOnce(mockTarballResponse(realTarball));
 
       const postUpdateMock = vi.fn().mockResolvedValue(undefined);
       const hooks: UpdateHooks = {
@@ -214,19 +197,7 @@ describe("Self-Update Engine", () => {
     });
 
     it("rolls back on health check failure", async () => {
-      const tarballData = Buffer.from("fake tarball data");
-      const stream = new ReadableStream({
-        start(controller) {
-          controller.enqueue(new Uint8Array(tarballData));
-          controller.close();
-        },
-      });
-
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        body: stream,
-        arrayBuffer: async () => tarballData.buffer,
-      });
+      mockFetch.mockResolvedValueOnce(mockTarballResponse(realTarball));
 
       const opts: UpdateOptions = {
         aofRoot,
@@ -327,5 +298,39 @@ describe("Self-Update Engine", () => {
         }),
       ).rejects.toThrow(/backup not found/i);
     });
+  });
+});
+
+describe("extractTarball integration", () => {
+  it("should extract a tar.gz archive correctly", () => {
+    // Create a temp tarball mimicking build-tarball.mjs output
+    const tmpDir = mkdtempSync(join(tmpdir(), "aof-extract-test-"));
+    const stagingDir = join(tmpDir, "staging");
+    mkdirSync(stagingDir, { recursive: true });
+
+    // Create test files matching tarball structure
+    writeFileSync(join(stagingDir, "package.json"), '{"name":"aof","version":"0.1.0"}');
+    mkdirSync(join(stagingDir, "dist"), { recursive: true });
+    writeFileSync(join(stagingDir, "dist", "index.js"), "console.log('aof');");
+
+    // Create tarball (same way as build-tarball.mjs: -C staging .)
+    const tarballPath = join(tmpDir, "aof-test.tar.gz");
+    execSync(`tar -czf "${tarballPath}" -C "${stagingDir}" .`);
+
+    // Extract to new directory
+    const extractDir = join(tmpDir, "extracted");
+    mkdirSync(extractDir, { recursive: true });
+    execSync(`tar -xzf "${tarballPath}" -C "${extractDir}"`);
+
+    // Verify
+    const pkg = JSON.parse(readFileSync(join(extractDir, "package.json"), "utf-8"));
+    expect(pkg.name).toBe("aof");
+    expect(pkg.version).toBe("0.1.0");
+
+    const index = readFileSync(join(extractDir, "dist", "index.js"), "utf-8");
+    expect(index).toBe("console.log('aof');");
+
+    // Cleanup
+    execSync(`rm -rf "${tmpDir}"`);
   });
 });

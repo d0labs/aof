@@ -20,6 +20,7 @@ const required = [
   'openclaw.plugin.json',
   'README.md',
   'package.json',
+  'package-lock.json',
 ];
 
 const optional = ['LICENSE'];
