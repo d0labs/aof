@@ -165,7 +165,7 @@ Test task body`;
     expect(task?.frontmatter.status).toBe("deadletter");
   });
 
-  it("transitionToDeadletter emits task.deadletter event with ops context", async () => {
+  it("transitionToDeadletter emits task.deadlettered event with ops context", async () => {
     const taskId = "TASK-2026-02-13-006";
     const taskContent = `---
 schemaVersion: 1
@@ -192,8 +192,8 @@ Test task body`;
     // Transition to deadletter
     await transitionToDeadletter(store, eventLogger, taskId, "test failure 3");
 
-    // ODD: assert on task.deadletter event, not console.error text
-    const deadletterEvent = capturedEvents.find(e => e.type === "task.deadletter");
+    // Assert on task.deadlettered event (FOUND-04: canonical event type)
+    const deadletterEvent = capturedEvents.find(e => e.type === "task.deadlettered");
     expect(deadletterEvent).toBeDefined();
     expect(deadletterEvent?.taskId).toBe(taskId);
     expect(deadletterEvent?.payload.reason).toBe("max_dispatch_failures");
@@ -234,11 +234,184 @@ Test task body`;
     const eventsLog = await readFile(join(testDir, "events", "events.jsonl"), "utf-8");
     const events = eventsLog.trim().split("\n").map(line => JSON.parse(line));
     
-    // Check for deadletter event
-    const deadletterEvent = events.find(e => e.type === "task.deadletter");
+    // Check for deadletter event (FOUND-04: task.deadlettered is canonical)
+    const deadletterEvent = events.find(e => e.type === "task.deadlettered");
     expect(deadletterEvent).toBeDefined();
     expect(deadletterEvent?.taskId).toBe(taskId);
     expect(deadletterEvent?.payload.reason).toBe("max_dispatch_failures");
     expect(deadletterEvent?.payload.failureCount).toBe(3);
+  });
+
+  // --- FOUND-04: Enhanced dead-letter event tests ---
+
+  it("emits task.deadlettered event with full failure chain", async () => {
+    const taskId = "TASK-2026-02-13-020";
+    const taskContent = `---
+schemaVersion: 1
+id: ${taskId}
+project: test
+title: Failure Chain Task
+status: ready
+priority: normal
+createdAt: 2026-02-13T00:00:00Z
+updatedAt: 2026-02-13T00:00:00Z
+lastTransitionAt: 2026-02-13T00:00:00Z
+createdBy: system
+routing:
+  agent: swe-backend
+metadata:
+  dispatchFailures: 3
+  retryCount: 2
+  errorClass: transient
+  lastError: "gateway timeout"
+  lastBlockedAt: "2026-02-13T01:00:00Z"
+  lastDispatchFailureAt: 1739408400000
+  lastDispatchFailureReason: "gateway timeout"
+---
+
+Test task body`;
+
+    await writeFile(join(testDir, "tasks", "ready", `${taskId}.md`), taskContent);
+
+    await transitionToDeadletter(store, eventLogger, taskId, "gateway timeout");
+
+    const deadletterEvent = capturedEvents.find(e => e.type === "task.deadlettered");
+    expect(deadletterEvent).toBeDefined();
+    expect(deadletterEvent?.taskId).toBe(taskId);
+
+    // Verify full failure chain in payload
+    const payload = deadletterEvent?.payload as Record<string, unknown>;
+    expect(payload.reason).toBe("max_dispatch_failures");
+    expect(payload.failureCount).toBe(3);
+    expect(payload.retryCount).toBe(2);
+    expect(payload.lastFailureReason).toBe("gateway timeout");
+    expect(payload.errorClass).toBe("transient");
+    expect(payload.agent).toBe("swe-backend");
+
+    // Verify failureHistory sub-object
+    const history = payload.failureHistory as Record<string, unknown>;
+    expect(history.dispatchFailures).toBe(3);
+    expect(history.retryCount).toBe(2);
+    expect(history.lastError).toBe("gateway timeout");
+    expect(history.lastBlockedAt).toBe("2026-02-13T01:00:00Z");
+    expect(history.lastDispatchFailureAt).toBe(1739408400000);
+  });
+
+  it("includes errorClass permanent in dead-letter event payload", async () => {
+    const taskId = "TASK-2026-02-13-021";
+    const taskContent = `---
+schemaVersion: 1
+id: ${taskId}
+project: test
+title: Permanent Error Task
+status: ready
+priority: normal
+createdAt: 2026-02-13T00:00:00Z
+updatedAt: 2026-02-13T00:00:00Z
+lastTransitionAt: 2026-02-13T00:00:00Z
+createdBy: system
+routing:
+  agent: swe-backend
+metadata:
+  dispatchFailures: 1
+  retryCount: 0
+  errorClass: permanent
+  lastError: "agent not found"
+---
+
+Test task body`;
+
+    await writeFile(join(testDir, "tasks", "ready", `${taskId}.md`), taskContent);
+
+    await transitionToDeadletter(store, eventLogger, taskId, "agent not found");
+
+    const deadletterEvent = capturedEvents.find(e => e.type === "task.deadlettered");
+    expect(deadletterEvent).toBeDefined();
+
+    const payload = deadletterEvent?.payload as Record<string, unknown>;
+    expect(payload.errorClass).toBe("permanent");
+    expect(payload.reason).toBe("permanent_error");
+  });
+
+  it("includes retryCount and errorClass in console error output", async () => {
+    const taskId = "TASK-2026-02-13-022";
+    const taskContent = `---
+schemaVersion: 1
+id: ${taskId}
+project: test
+title: Console Output Task
+status: ready
+priority: normal
+createdAt: 2026-02-13T00:00:00Z
+updatedAt: 2026-02-13T00:00:00Z
+lastTransitionAt: 2026-02-13T00:00:00Z
+createdBy: system
+routing:
+  agent: swe-backend
+metadata:
+  dispatchFailures: 3
+  retryCount: 2
+  errorClass: transient
+---
+
+Test task body`;
+
+    await writeFile(join(testDir, "tasks", "ready", `${taskId}.md`), taskContent);
+
+    const consoleErrors: string[] = [];
+    const originalError = console.error;
+    console.error = (...args: unknown[]) => consoleErrors.push(args.join(" "));
+
+    try {
+      await transitionToDeadletter(store, eventLogger, taskId, "gateway timeout");
+    } finally {
+      console.error = originalError;
+    }
+
+    // Verify retryCount and errorClass appear in console output
+    const output = consoleErrors.join("\n");
+    expect(output).toContain("Retries: 2");
+    expect(output).toContain("Error class: transient");
+    expect(output).toContain("Failure count: 3");
+  });
+
+  it("handles missing metadata fields gracefully", async () => {
+    const taskId = "TASK-2026-02-13-023";
+    const taskContent = `---
+schemaVersion: 1
+id: ${taskId}
+project: test
+title: Minimal Metadata Task
+status: ready
+priority: normal
+createdAt: 2026-02-13T00:00:00Z
+updatedAt: 2026-02-13T00:00:00Z
+lastTransitionAt: 2026-02-13T00:00:00Z
+createdBy: system
+metadata: {}
+---
+
+Test task body`;
+
+    await writeFile(join(testDir, "tasks", "ready", `${taskId}.md`), taskContent);
+
+    // Should not throw even with minimal metadata
+    await transitionToDeadletter(store, eventLogger, taskId, "some failure");
+
+    const deadletterEvent = capturedEvents.find(e => e.type === "task.deadlettered");
+    expect(deadletterEvent).toBeDefined();
+
+    const payload = deadletterEvent?.payload as Record<string, unknown>;
+    // Missing metadata defaults to safe values
+    expect(payload.failureCount).toBe(0);
+    expect(payload.retryCount).toBe(0);
+    expect(payload.errorClass).toBe("unknown");
+    expect(payload.agent).toBe("unassigned");
+
+    const history = payload.failureHistory as Record<string, unknown>;
+    expect(history.dispatchFailures).toBe(0);
+    expect(history.retryCount).toBe(0);
+    expect(history.lastError).toBe("some failure"); // Falls back to lastFailureReason param
+    expect(history.lastBlockedAt).toBe("unknown");
   });
 });

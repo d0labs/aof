@@ -53,10 +53,10 @@ export function shouldTransitionToDeadletter(task: Task): boolean {
 
 /**
  * Transition a task to deadletter status.
- * 
+ *
  * - Updates task status to "deadletter"
  * - Moves task file to tasks/deadletter/
- * - Logs deadletter event
+ * - Logs deadletter event with full failure chain (FOUND-04)
  * - Emits ops alert (console + events.jsonl)
  */
 export async function transitionToDeadletter(
@@ -71,25 +71,39 @@ export async function transitionToDeadletter(
   }
 
   const failureCount = (task.frontmatter.metadata.dispatchFailures as number | undefined) ?? 0;
+  const retryCount = (task.frontmatter.metadata.retryCount as number | undefined) ?? 0;
+  const errorClass = (task.frontmatter.metadata.errorClass as string | undefined) ?? "unknown";
   const agent = task.frontmatter.routing?.agent;
 
   // Transition task to deadletter status
   await store.transition(taskId, "deadletter");
 
-  // Log deadletter event
-  await eventLogger.log("task.deadletter", "system", {
+  // Log deadletter event with full failure chain (FOUND-04)
+  // Uses "task.deadlettered" as canonical event type (backward compat: "task.deadletter" still in schema)
+  await eventLogger.log("task.deadlettered", "system", {
     taskId,
     payload: {
-      reason: "max_dispatch_failures",
+      reason: errorClass === "permanent" ? "permanent_error" : "max_dispatch_failures",
       failureCount,
+      retryCount,
       lastFailureReason,
+      errorClass,
+      agent: agent ?? "unassigned",
+      failureHistory: {
+        dispatchFailures: failureCount,
+        retryCount,
+        lastError: (task.frontmatter.metadata.lastError as string | undefined) ?? lastFailureReason,
+        lastBlockedAt: (task.frontmatter.metadata.lastBlockedAt as string | undefined) ?? "unknown",
+        lastDispatchFailureAt: (task.frontmatter.metadata.lastDispatchFailureAt as number | undefined) ?? "unknown",
+      },
     },
   });
 
-  // Emit ops alert (console)
+  // Emit ops alert (console) with full diagnostic context
   // AOF-1m9: Mandatory ops alerting for deadletter transitions
   console.error(`[AOF] DEADLETTER: Task ${taskId} (${task.frontmatter.title})`);
-  console.error(`[AOF] DEADLETTER:   Failure count: ${failureCount}`);
+  console.error(`[AOF] DEADLETTER:   Failure count: ${failureCount}, Retries: ${retryCount}`);
+  console.error(`[AOF] DEADLETTER:   Error class: ${errorClass}`);
   console.error(`[AOF] DEADLETTER:   Last failure: ${lastFailureReason}`);
   console.error(`[AOF] DEADLETTER:   Agent: ${agent ?? "unassigned"}`);
   console.error(`[AOF] DEADLETTER:   Action: Investigate failure cause before resurrection`);

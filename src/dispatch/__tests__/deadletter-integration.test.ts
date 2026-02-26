@@ -89,8 +89,8 @@ Test task body`;
     const eventsLog = await readFile(join(testDir, "events", "events.jsonl"), "utf-8");
     const events = eventsLog.trim().split("\n").map(line => JSON.parse(line));
 
-    // Check for deadletter event
-    const deadletterEvent = events.find(e => e.type === "task.deadletter");
+    // Check for deadletter event (FOUND-04: task.deadlettered is canonical)
+    const deadletterEvent = events.find(e => e.type === "task.deadlettered");
     expect(deadletterEvent).toBeDefined();
     expect(deadletterEvent?.payload.failureCount).toBe(3);
 
@@ -159,10 +159,10 @@ Task body`);
 
     await transitionToDeadletter(store, eventLogger, taskId, "failure 3");
 
-    // ODD event: task.deadletter with failureCount=3
+    // ODD event: task.deadlettered with failureCount=3 (FOUND-04: canonical event type)
     const eventsLog = await readFile(join(testDir, "events", "events.jsonl"), "utf-8");
     const events = eventsLog.trim().split("\n").map(l => JSON.parse(l));
-    const deadletterEvent = events.find(e => e.type === "task.deadletter");
+    const deadletterEvent = events.find(e => e.type === "task.deadlettered");
     expect(deadletterEvent?.payload.failureCount).toBe(3);
     expect(deadletterEvent?.payload.lastFailureReason).toBe("failure 3");
 
