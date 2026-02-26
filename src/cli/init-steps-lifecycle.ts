@@ -113,13 +113,14 @@ export async function runDaemonStep(state: WizardState, yes: boolean): Promise<v
     console.log();
     return;
   }
-  console.log("  Starting AOF daemon...");
+  console.log("  Installing AOF daemon under OS supervision...");
   try {
-    const { daemonStart } = await import("./commands/daemon.js");
-    await daemonStart(dataDir, { port: "18000", bind: "127.0.0.1", logLevel: "info" });
+    const { installService } = await import("../daemon/service-file.js");
+    await installService({ dataDir });
     state.daemonRunning = true;
+    console.log("  ✅ AOF daemon installed and started.\n");
   } catch (err) {
-    const msg = `Daemon start failed: ${err instanceof Error ? err.message : String(err)}`;
+    const msg = `Daemon install failed: ${err instanceof Error ? err.message : String(err)}`;
     state.warnings.push(msg);
     console.log(`  ❌ ${msg}\n`);
   }

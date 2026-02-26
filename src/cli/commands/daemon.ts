@@ -1,57 +1,50 @@
 /**
- * Daemon management commands — start/stop/status/restart.
- * 
- * Implements daemon lifecycle management via CLI.
+ * Daemon management commands -- install/uninstall/start/stop/status.
+ *
+ * `install`   writes an OS service file (launchd plist / systemd unit) and starts the daemon.
+ * `uninstall` stops the daemon, removes the service file, and cleans up.
+ * `start`     redirects to `install`, or runs in foreground with --foreground.
+ * `stop`      sends SIGTERM via PID, with timeout fallback to SIGKILL.
+ * `status`    reads PID file and reports daemon state (redesign planned for Plan 03).
  */
 
-import { fork, type ChildProcess } from "node:child_process";
-import { join, dirname } from "node:path";
-import { existsSync, readFileSync, unlinkSync } from "node:fs";
-import { fileURLToPath } from "node:url";
+import { join } from "node:path";
+import { existsSync, readFileSync, unlinkSync, mkdirSync } from "node:fs";
 import type { Command } from "commander";
+import {
+  installService,
+  uninstallService,
+  getServiceFilePath,
+  type ServiceFileConfig,
+} from "../../daemon/service-file.js";
+import { selfCheck } from "../../daemon/server.js";
+import { startAofDaemon } from "../../daemon/daemon.js";
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
-
-export interface DaemonStartOptions {
-  port: string;
-  bind: string;
-  dataDir?: string;
-  logLevel: string;
-}
+// ---------------------------------------------------------------------------
+// Shared helpers
+// ---------------------------------------------------------------------------
 
 export interface DaemonStopOptions {
   timeout: string;
 }
 
-/**
- * Check if a process is running.
- */
 function isProcessRunning(pid: number): boolean {
   try {
-    process.kill(pid, 0); // Signal 0 checks existence
+    process.kill(pid, 0);
     return true;
   } catch {
     return false;
   }
 }
 
-/**
- * Read PID from daemon.pid file.
- */
 function readPidFile(dataDir: string): number | null {
   const pidFile = join(dataDir, "daemon.pid");
-  if (!existsSync(pidFile)) {
-    return null;
-  }
+  if (!existsSync(pidFile)) return null;
   const pidStr = readFileSync(pidFile, "utf-8").trim();
   const pid = parseInt(pidStr, 10);
   return isNaN(pid) ? null : pid;
 }
 
-/**
- * Clean up stale PID file.
- */
 function cleanupStalePidFile(dataDir: string): void {
   const pidFile = join(dataDir, "daemon.pid");
   if (existsSync(pidFile)) {
@@ -60,255 +53,315 @@ function cleanupStalePidFile(dataDir: string): void {
   }
 }
 
-/**
- * Get daemon uptime from PID.
- */
 async function getDaemonUptime(pid: number): Promise<number | null> {
   try {
-    // Use ps to get process start time
     const { execSync } = await import("node:child_process");
     const output = execSync(`ps -p ${pid} -o etime=`, { encoding: "utf-8" }) as string;
     const etime = output.trim();
-    
-    // Parse etime format: [[dd-]hh:]mm:ss
     const parts = etime.split(/[-:]/);
     let seconds = 0;
-    
     if (parts.length === 1 && parts[0]) {
-      // ss
       seconds = parseInt(parts[0], 10);
     } else if (parts.length === 2 && parts[0] && parts[1]) {
-      // mm:ss
       seconds = parseInt(parts[0], 10) * 60 + parseInt(parts[1], 10);
     } else if (parts.length === 3 && parts[0] && parts[1] && parts[2]) {
-      // hh:mm:ss
       seconds = parseInt(parts[0], 10) * 3600 + parseInt(parts[1], 10) * 60 + parseInt(parts[2], 10);
     } else if (parts.length === 4 && parts[0] && parts[1] && parts[2] && parts[3]) {
-      // dd-hh:mm:ss
       seconds = parseInt(parts[0], 10) * 86400 + parseInt(parts[1], 10) * 3600 + parseInt(parts[2], 10) * 60 + parseInt(parts[3], 10);
     }
-    
     return seconds;
   } catch {
     return null;
   }
 }
 
-/**
- * Format uptime in human-readable format.
- */
 function formatUptime(seconds: number): string {
   const days = Math.floor(seconds / 86400);
   const hours = Math.floor((seconds % 86400) / 3600);
   const minutes = Math.floor((seconds % 3600) / 60);
   const secs = seconds % 60;
-  
   const parts: string[] = [];
   if (days > 0) parts.push(`${days}d`);
   if (hours > 0) parts.push(`${hours}h`);
   if (minutes > 0) parts.push(`${minutes}m`);
   if (secs > 0 || parts.length === 0) parts.push(`${secs}s`);
-  
   return parts.join(" ");
 }
 
+// ---------------------------------------------------------------------------
+// Config validation
+// ---------------------------------------------------------------------------
+
 /**
- * Start the daemon in background.
+ * Validate that the data directory is usable for daemon operation.
+ * Checks existence, writability (via logs dir creation), and basic structure.
  */
-export async function daemonStart(
-  dataDir: string,
-  options: DaemonStartOptions
-): Promise<void> {
-  // Check if daemon is already running
-  const existingPid = readPidFile(dataDir);
-  if (existingPid && isProcessRunning(existingPid)) {
-    console.error(`❌ Daemon already running (PID: ${existingPid})`);
-    process.exitCode = 1;
-    return;
+function validateConfig(dataDir: string): { valid: boolean; error?: string } {
+  if (!existsSync(dataDir)) {
+    return { valid: false, error: `Data directory does not exist: ${dataDir}` };
   }
 
-  // Clean up stale PID file if exists
-  if (existingPid && !isProcessRunning(existingPid)) {
-    cleanupStalePidFile(dataDir);
+  // Ensure tasks/ directory exists or can be created
+  const tasksDir = join(dataDir, "tasks");
+  try {
+    mkdirSync(tasksDir, { recursive: true });
+  } catch (err) {
+    return {
+      valid: false,
+      error: `Cannot create tasks directory at ${tasksDir}: ${(err as Error).message}`,
+    };
   }
 
-  // Resolve daemon entry point
-  const daemonEntry = join(__dirname, "../../daemon/index.js");
-  
-  console.log("🚀 Starting AOF daemon...\n");
-  console.log(`   Data directory: ${dataDir}`);
-  console.log(`   Port: ${options.port}`);
-  console.log(`   Bind address: ${options.bind}`);
-  console.log(`   Log level: ${options.logLevel}\n`);
-
-  // Fork daemon process (detached)
-  const child: ChildProcess = fork(daemonEntry, [
-    "--root", dataDir,
-  ], {
-    detached: true,
-    stdio: "ignore",
-    env: {
-      ...process.env,
-      AOF_DAEMON_PORT: options.port,
-      AOF_DAEMON_BIND: options.bind,
-      AOF_LOG_LEVEL: options.logLevel,
-    },
-  });
-
-  child.unref();
-
-  // Wait a bit to check if daemon started successfully
-  await new Promise((resolve) => setTimeout(resolve, 1000));
-
-  const pid = readPidFile(dataDir);
-  if (!pid || !isProcessRunning(pid)) {
-    console.error("❌ Daemon failed to start");
-    console.error("   Check daemon logs for details");
-    process.exitCode = 1;
-    return;
+  // Ensure logs/ directory exists or can be created
+  const logsDir = join(dataDir, "logs");
+  try {
+    mkdirSync(logsDir, { recursive: true });
+  } catch (err) {
+    return {
+      valid: false,
+      error: `Cannot create logs directory at ${logsDir}: ${(err as Error).message}`,
+    };
   }
 
-  console.log(`✅ Daemon started successfully`);
-  console.log(`   PID: ${pid}`);
-  console.log(`   Health endpoint: http://${options.bind}:${options.port}/health`);
+  return { valid: true };
 }
 
-/**
- * Stop the daemon.
- */
+// ---------------------------------------------------------------------------
+// Install
+// ---------------------------------------------------------------------------
+
+async function daemonInstall(dataDir: string): Promise<void> {
+  console.log("Installing AOF daemon...\n");
+
+  // Validate config
+  const validation = validateConfig(dataDir);
+  if (!validation.valid) {
+    console.error(`Error: ${validation.error}`);
+    console.error("\nFix the issue above and try again.");
+    process.exitCode = 1;
+    return;
+  }
+
+  const platformName = process.platform === "darwin" ? "macOS (launchd)" : "Linux (systemd)";
+  const servicePath = getServiceFilePath(process.platform);
+  const socketPath = join(dataDir, "daemon.sock");
+
+  const config: ServiceFileConfig = { dataDir };
+
+  try {
+    const result = await installService(config);
+
+    console.log(`  Platform:       ${platformName}`);
+    console.log(`  Service file:   ${result.servicePath}`);
+    console.log(`  Data directory: ${dataDir}`);
+    console.log(`  Socket:         ${socketPath}`);
+    console.log("");
+
+    // Wait 2 seconds for daemon to start, then health check
+    await new Promise((resolve) => setTimeout(resolve, 2000));
+
+    const healthy = await selfCheck(socketPath);
+    if (healthy) {
+      const pid = readPidFile(dataDir);
+      console.log(`Daemon installed and started.${pid ? ` (PID: ${pid})` : ""}`);
+    } else {
+      console.log("Service file installed but daemon may not have started yet.");
+      console.log("Check `aof daemon status`.");
+    }
+  } catch (err) {
+    console.error(`Failed to install daemon: ${(err as Error).message}`);
+    process.exitCode = 1;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Uninstall
+// ---------------------------------------------------------------------------
+
+async function daemonUninstall(dataDir: string): Promise<void> {
+  try {
+    await uninstallService(dataDir);
+    console.log("Daemon uninstalled. Service file removed.");
+  } catch (err) {
+    console.error(`Failed to uninstall daemon: ${(err as Error).message}`);
+    process.exitCode = 1;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Start (foreground mode for development)
+// ---------------------------------------------------------------------------
+
+async function daemonStartForeground(dataDir: string): Promise<void> {
+  console.log("Starting AOF daemon in foreground...\n");
+
+  const validation = validateConfig(dataDir);
+  if (!validation.valid) {
+    console.error(`Error: ${validation.error}`);
+    process.exitCode = 1;
+    return;
+  }
+
+  console.log(`  Data directory: ${dataDir}`);
+  console.log(`  Socket:         ${join(dataDir, "daemon.sock")}`);
+  console.log("");
+
+  try {
+    const { service } = await startAofDaemon({
+      dataDir,
+      enableHealthServer: true,
+    });
+
+    console.log("Daemon running. Press Ctrl+C to stop.");
+
+    // Keep the process alive — signal handlers in daemon.ts handle shutdown
+    await new Promise<void>(() => {
+      // Never resolves — the daemon runs until killed
+    });
+  } catch (err) {
+    console.error(`Failed to start daemon: ${(err as Error).message}`);
+    process.exitCode = 1;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Stop
+// ---------------------------------------------------------------------------
+
 export async function daemonStop(
   dataDir: string,
-  options: DaemonStopOptions
+  options: DaemonStopOptions,
 ): Promise<void> {
   const pid = readPidFile(dataDir);
-  
+
   if (!pid) {
-    console.log("ℹ️  Daemon not running (no PID file)");
+    console.log("Daemon is not running. Run `aof daemon install` to start.");
     return;
   }
 
   if (!isProcessRunning(pid)) {
-    console.log("ℹ️  Daemon not running (process not found)");
+    console.log("Daemon is not running (stale PID file).");
     cleanupStalePidFile(dataDir);
     return;
   }
 
   const timeoutSeconds = parseInt(options.timeout, 10);
-  console.log(`🛑 Stopping daemon (PID: ${pid})...\n`);
+  console.log(`Stopping daemon (PID: ${pid})...\n`);
 
-  // Send SIGTERM for graceful shutdown
   try {
     process.kill(pid, "SIGTERM");
     console.log("   Sent SIGTERM, waiting for graceful shutdown...");
   } catch (err) {
-    console.error(`❌ Failed to send SIGTERM: ${(err as Error).message}`);
+    console.error(`Failed to send SIGTERM: ${(err as Error).message}`);
     process.exitCode = 1;
     return;
   }
 
-  // Wait for graceful shutdown
   const startTime = Date.now();
   while (Date.now() - startTime < timeoutSeconds * 1000) {
     if (!isProcessRunning(pid)) {
       console.log("   Daemon stopped gracefully");
       cleanupStalePidFile(dataDir);
-      console.log("\n✅ Daemon stopped");
+      console.log("\nDaemon stopped.");
       return;
     }
     await new Promise((resolve) => setTimeout(resolve, 100));
   }
 
-  // Force kill if still alive
   console.log(`   Timeout (${timeoutSeconds}s) reached, sending SIGKILL...`);
   try {
     process.kill(pid, "SIGKILL");
     console.log("   Daemon force-killed");
   } catch (err) {
-    console.error(`❌ Failed to force-kill: ${(err as Error).message}`);
+    console.error(`Failed to force-kill: ${(err as Error).message}`);
     process.exitCode = 1;
     return;
   }
 
   cleanupStalePidFile(dataDir);
-  console.log("\n✅ Daemon stopped (force-killed)");
+  console.log("\nDaemon stopped (force-killed).");
 }
 
-/**
- * Check daemon status.
- */
-export async function daemonStatus(
-  dataDir: string,
-  healthPort: string,
-  healthBind: string
-): Promise<void> {
+// ---------------------------------------------------------------------------
+// Status
+// ---------------------------------------------------------------------------
+
+export async function daemonStatus(dataDir: string): Promise<void> {
   const pid = readPidFile(dataDir);
+  const socketPath = join(dataDir, "daemon.sock");
 
   if (!pid) {
-    console.log("❌ Daemon not running (no PID file)");
-    process.exitCode = 1;
+    console.log("Daemon is not running. Run `aof daemon install` to start.");
+    process.exitCode = 2;
     return;
   }
 
   if (!isProcessRunning(pid)) {
-    console.log("❌ Daemon not running (stale PID file)");
+    console.log("Daemon is not running (stale PID file).");
     console.log(`   Stale PID: ${pid}`);
-    console.log(`   PID file: ${join(dataDir, "daemon.pid")}`);
-    process.exitCode = 1;
+    console.log(`   PID file:  ${join(dataDir, "daemon.pid")}`);
+    process.exitCode = 2;
     return;
   }
 
-  // Daemon is running
   const uptime = await getDaemonUptime(pid);
-  
-  console.log("✅ Daemon running\n");
-  console.log(`   PID: ${pid}`);
+  const healthy = await selfCheck(socketPath);
+
+  console.log("Daemon running\n");
+  console.log(`   PID:          ${pid}`);
   if (uptime !== null) {
-    console.log(`   Uptime: ${formatUptime(uptime)}`);
+    console.log(`   Uptime:       ${formatUptime(uptime)}`);
   }
-  console.log(`   Health endpoint: http://${healthBind}:${healthPort}/health`);
-  console.log(`   Data directory: ${dataDir}`);
+  console.log(`   Health:       ${healthy ? "ok" : "unreachable"}`);
+  console.log(`   Socket:       ${socketPath}`);
+  console.log(`   Data dir:     ${dataDir}`);
 }
 
-/**
- * Restart the daemon.
- */
-export async function daemonRestart(
-  dataDir: string,
-  startOptions: DaemonStartOptions
-): Promise<void> {
-  console.log("🔄 Restarting daemon...\n");
+// ---------------------------------------------------------------------------
+// Command registration
+// ---------------------------------------------------------------------------
 
-  // Stop first
-  const stopOptions: DaemonStopOptions = { timeout: "10" };
-  await daemonStop(dataDir, stopOptions);
-
-  // Wait a bit before starting
-  await new Promise((resolve) => setTimeout(resolve, 500));
-
-  // Start
-  console.log("");
-  await daemonStart(dataDir, startOptions);
-}
-
-/**
- * Register daemon commands with the CLI program.
- */
 export function registerDaemonCommands(program: Command): void {
   const daemon = program
     .command("daemon")
-    .description("Daemon management commands");
+    .description("Daemon lifecycle management (install, uninstall, stop, status)");
+
+  daemon
+    .command("install")
+    .description("Install and start the AOF daemon under OS supervision (launchd/systemd)")
+    .option("--data-dir <path>", "Data directory (default: --root value)")
+    .action(async (opts: { dataDir?: string }) => {
+      const root = program.opts()["root"] as string;
+      const dataDir = opts.dataDir ?? root;
+      await daemonInstall(dataDir);
+    });
+
+  daemon
+    .command("uninstall")
+    .description("Stop the daemon, remove the service file, and clean up")
+    .option("--data-dir <path>", "Data directory (default: --root value)")
+    .action(async (opts: { dataDir?: string }) => {
+      const root = program.opts()["root"] as string;
+      const dataDir = opts.dataDir ?? root;
+      await daemonUninstall(dataDir);
+    });
 
   daemon
     .command("start")
-    .description("Start the AOF daemon in background")
-    .option("--port <number>", "HTTP port", "18000")
-    .option("--bind <address>", "Bind address", "127.0.0.1")
-    .option("--data-dir <path>", "Data directory")
-    .option("--log-level <level>", "Log level", "info")
-    .action(async (opts: { port: string; bind: string; dataDir?: string; logLevel: string }) => {
+    .description("Start daemon (use --foreground for development, otherwise redirects to install)")
+    .option("--foreground", "Run daemon in the current process (development mode)", false)
+    .option("--data-dir <path>", "Data directory (default: --root value)")
+    .action(async (opts: { foreground: boolean; dataDir?: string }) => {
       const root = program.opts()["root"] as string;
       const dataDir = opts.dataDir ?? root;
-      await daemonStart(dataDir, opts);
+
+      if (opts.foreground) {
+        await daemonStartForeground(dataDir);
+      } else {
+        console.log("Use `aof daemon install` to start the daemon under OS supervision.");
+        console.log("Use `aof daemon start --foreground` for development.\n");
+        await daemonInstall(dataDir);
+      }
     });
 
   daemon
@@ -323,23 +376,8 @@ export function registerDaemonCommands(program: Command): void {
   daemon
     .command("status")
     .description("Check daemon status")
-    .option("--port <number>", "HTTP port (for health endpoint display)", "18000")
-    .option("--bind <address>", "Bind address (for health endpoint display)", "127.0.0.1")
-    .action(async (opts: { port: string; bind: string }) => {
+    .action(async () => {
       const root = program.opts()["root"] as string;
-      await daemonStatus(root, opts.port, opts.bind);
-    });
-
-  daemon
-    .command("restart")
-    .description("Restart the daemon")
-    .option("--port <number>", "HTTP port", "18000")
-    .option("--bind <address>", "Bind address", "127.0.0.1")
-    .option("--data-dir <path>", "Data directory")
-    .option("--log-level <level>", "Log level", "info")
-    .action(async (opts: { port: string; bind: string; dataDir?: string; logLevel: string }) => {
-      const root = program.opts()["root"] as string;
-      const dataDir = opts.dataDir ?? root;
-      await daemonRestart(dataDir, opts);
+      await daemonStatus(root);
     });
 }
