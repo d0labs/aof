@@ -1,5 +1,5 @@
 import { execSync } from 'node:child_process';
-import { mkdirSync, cpSync, existsSync } from 'node:fs';
+import { mkdirSync, cpSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 const version = process.argv[2];
@@ -41,6 +41,14 @@ for (const f of optional) {
     // Optional file missing — skip silently
   }
 }
+
+// Strip dev-only fields from staged package.json so end-user npm ci
+// doesn't choke on the "prepare" script (simple-git-hooks isn't shipped).
+const pkgPath = join(staging, 'package.json');
+const pkg = JSON.parse(readFileSync(pkgPath, 'utf8'));
+delete pkg.scripts?.prepare;
+delete pkg['simple-git-hooks'];
+writeFileSync(pkgPath, JSON.stringify(pkg, null, 2) + '\n');
 
 const tarball = `aof-${version}.tar.gz`;
 execSync(`tar -czf ${tarball} -C ${staging} .`);
