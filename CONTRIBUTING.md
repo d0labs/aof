@@ -12,7 +12,8 @@ Thank you for your interest in contributing to AOF! This document covers develop
 4. [Coding Standards](#coding-standards)
 5. [Testing](#testing)
 6. [Submitting a Pull Request](#submitting-a-pull-request)
-7. [Reporting Issues](#reporting-issues)
+7. [Releasing](#releasing)
+8. [Reporting Issues](#reporting-issues)
 
 ---
 
@@ -189,6 +190,44 @@ npx vitest src/dispatch --watch
 - [ ] `npx tsc --noEmit` clean
 - [ ] Docs updated (if applicable)
 - [ ] Commit messages are descriptive
+
+---
+
+## Releasing
+
+AOF uses tagged releases. CI builds the tarball and publishes the GitHub release automatically.
+
+### How it works
+
+1. Create a version tag on `main`:
+   ```bash
+   git tag -a v1.2.0 -m "AOF v1.2.0"
+   ```
+2. Push the tag:
+   ```bash
+   git push origin main --tags
+   ```
+3. The [release workflow](.github/workflows/release.yml) triggers on `v*` tags and:
+   - Runs typecheck, build, and tests
+   - Generates a changelog from conventional commits since the previous tag
+   - Builds a release tarball via `scripts/build-tarball.mjs` (strips dev-only fields like `prepare` and `simple-git-hooks` from `package.json`)
+   - Creates a GitHub release with the changelog and tarball attached
+
+### Version scheme
+
+- **Patch** (`v1.1.1`): bug fixes, CI changes, doc fixes
+- **Minor** (`v1.2.0`): new features, non-breaking changes
+- **Major** (`v2.0.0`): breaking changes to CLI, config schema, or plugin API
+
+### Alternative: release-it
+
+You can also use `release-it` to automate version bumping, tagging, and changelog generation in one step:
+
+```bash
+npm run release:patch   # or release:minor, release:major
+```
+
+This requires a `GITHUB_TOKEN` (sourced automatically from `gh auth token`).
 
 ---
 
