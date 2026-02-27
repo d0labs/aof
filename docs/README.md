@@ -10,6 +10,9 @@ This index is organized by audience: **User Guide** for operators and integrator
 
 End-user documentation for deploying, configuring, and operating AOF.
 
+- [Getting Started](guide/getting-started.md) -- Install AOF, configure it, and run your first task
+- [Configuration Reference](guide/configuration.md) -- Org-chart schema, AOF config options, and OpenClaw plugin wiring
+- [CLI Reference](guide/cli-reference.md) -- Auto-generated reference for all AOF commands
 - [Deployment Guide](guide/deployment.md) -- Set up AOF as an OpenClaw plugin or standalone daemon
 - [Workflow Gates User Guide](guide/workflow-gates.md) -- Define and use multi-stage workflow gates with review loops
 - [Task Format](guide/task-format.md) -- Task file structure and frontmatter schema
@@ -42,6 +45,7 @@ Contributor documentation, architecture decisions, and design specifications.
 
 ### Architecture & Design
 
+- [Architecture Overview](dev/architecture.md) -- System architecture, subsystem descriptions, and key interfaces
 - [Workflow Gates Design](dev/workflow-gates-design.md) -- Technical architecture and gate evaluation internals
 - [Protocols Design](dev/protocols-design.md) -- Protocol envelope format and router design
 - [Protocols BDD Specs](dev/protocols-bdd-specs.md) -- Behavior-driven protocol specifications
@@ -70,6 +74,8 @@ Example workflow definitions demonstrating AOF capabilities.
 
 | Task | Document |
 |------|----------|
+| Get started | [Getting Started](guide/getting-started.md) |
+| Configure AOF | [Configuration Reference](guide/configuration.md) |
 | Set up AOF | [Deployment Guide](guide/deployment.md) |
 | Create a workflow | [Workflow Gates User Guide](guide/workflow-gates.md) |
 | Understand task files | [Task Format](guide/task-format.md) |
