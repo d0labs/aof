@@ -17,39 +17,70 @@ async function resolveTask(store: ITaskStore, taskId: string) {
 
 // ===== TYPES =====
 
+/**
+ * Input for updating a task's body content and/or transitioning its status.
+ */
 export interface AOFTaskUpdateInput {
+  /** Full or prefix task ID to update. */
   taskId: string;
+  /** New markdown body content; replaces the existing body entirely. */
   body?: string;
+  /** Target status to transition the task to. */
   status?: TaskStatus;
+  /** Identity of the agent or user performing the update; defaults to "unknown". */
   actor?: string;
+  /** Reason for the status transition, recorded in the event log. */
   reason?: string;
 }
 
+/**
+ * Result of a task update operation, indicating what changed.
+ */
 export interface AOFTaskUpdateResult extends ToolResponseEnvelope {
+  /** The resolved task ID. */
   taskId: string;
+  /** The task's status after the update. */
   status: TaskStatus;
+  /** ISO 8601 timestamp of the last update. */
   updatedAt: string;
+  /** Whether the task body was modified. */
   bodyUpdated: boolean;
+  /** Whether a status transition occurred. */
   transitioned: boolean;
 }
 
+/**
+ * Input for editing a task's frontmatter fields (title, priority, routing).
+ */
 export interface AOFTaskEditInput {
+  /** Full or prefix task ID to edit. */
   taskId: string;
+  /** New task title. */
   title?: string;
+  /** New task description (body text). */
   description?: string;
+  /** New priority level. */
   priority?: TaskPriority;
+  /** Updated routing configuration (agent, team, role, tags). */
   routing?: {
     role?: string;
     team?: string;
     agent?: string;
     tags?: string[];
   };
+  /** Identity of the agent or user performing the edit; defaults to "unknown". */
   actor?: string;
 }
 
+/**
+ * Result of a task edit, listing which fields were modified.
+ */
 export interface AOFTaskEditResult extends ToolResponseEnvelope {
+  /** The resolved task ID. */
   taskId: string;
+  /** Names of frontmatter fields that were updated. */
   updatedFields: string[];
+  /** Snapshot of key task fields after the edit. */
   task: {
     title: string;
     status: TaskStatus;
@@ -57,20 +88,43 @@ export interface AOFTaskEditResult extends ToolResponseEnvelope {
   };
 }
 
+/**
+ * Input for cancelling a task.
+ */
 export interface AOFTaskCancelInput {
+  /** Full or prefix task ID to cancel. */
   taskId: string;
+  /** Human-readable reason for cancellation, logged in the event stream. */
   reason?: string;
+  /** Identity of the agent or user cancelling; defaults to "unknown". */
   actor?: string;
 }
 
+/**
+ * Result of a task cancellation.
+ */
 export interface AOFTaskCancelResult extends ToolResponseEnvelope {
+  /** The resolved task ID. */
   taskId: string;
+  /** The task's status after cancellation (always "cancelled"). */
   status: TaskStatus;
+  /** The cancellation reason, if provided. */
   reason?: string;
 }
 
 // ===== FUNCTIONS =====
 
+/**
+ * Update a task's body content and/or transition its lifecycle status.
+ *
+ * Resolves the task by full ID or prefix, optionally replaces the body,
+ * and optionally transitions to a new status. Both operations are independent
+ * and can be performed together or separately in a single call.
+ *
+ * @param ctx - Tool context providing store and logger access
+ * @param input - Task ID, optional new body, optional target status
+ * @returns Updated task state including whether body and/or status changed
+ */
 export async function aofTaskUpdate(
   ctx: ToolContext,
   input: AOFTaskUpdateInput,
@@ -114,6 +168,17 @@ export async function aofTaskUpdate(
   };
 }
 
+/**
+ * Edit a task's frontmatter fields (title, description, priority, routing).
+ *
+ * At least one field must be provided. The task is resolved by full ID or
+ * prefix, the specified fields are patched, and the updated frontmatter
+ * is persisted. Throws if no fields are provided.
+ *
+ * @param ctx - Tool context providing store and logger access
+ * @param input - Task ID and one or more fields to update
+ * @returns List of updated field names and a snapshot of the task's current state
+ */
 export async function aofTaskEdit(
   ctx: ToolContext,
   input: AOFTaskEditInput,
@@ -180,6 +245,16 @@ export async function aofTaskEdit(
   };
 }
 
+/**
+ * Cancel a task, moving it to the "cancelled" status.
+ *
+ * Resolves the task by full ID or prefix, delegates to store.cancel(),
+ * and logs a task.cancelled event with the optional reason.
+ *
+ * @param ctx - Tool context providing store and logger access
+ * @param input - Task ID and optional cancellation reason
+ * @returns The cancelled task's ID, final status, and reason
+ */
 export async function aofTaskCancel(
   ctx: ToolContext,
   input: AOFTaskCancelInput,

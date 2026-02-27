@@ -10,10 +10,17 @@
 import type { ITaskStore } from "../store/interfaces.js";
 import { EventLogger } from "../events/logger.js";
 
+/**
+ * Shared context passed to every AOF tool function, providing access to
+ * the task store, event logger, and optional project scope.
+ */
 export interface ToolContext {
+  /** The task store used for all CRUD and state-transition operations. */
   store: ITaskStore;
+  /** Event logger for recording audit events and triggering notifications. */
   logger: EventLogger;
-  projectId?: string;  // Auto-populated from active task's project
+  /** Project ID for scoping operations; auto-populated from the active task's project. */
+  projectId?: string;
 }
 
 // Project tools (task creation/dispatch)

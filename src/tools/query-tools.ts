@@ -6,20 +6,46 @@ import type { TaskStatus } from "../schemas/task.js";
 import { wrapResponse, compactResponse, type ToolResponseEnvelope } from "./envelope.js";
 import type { ToolContext } from "./aof-tools.js";
 
+/**
+ * Input parameters for generating a task status report.
+ */
 export interface AOFStatusReportInput {
+  /** Identity of the requesting agent or user; defaults to "system". */
   actor?: string;
+  /** Filter tasks assigned to a specific agent. */
   agent?: string;
+  /** Filter tasks to a specific lifecycle status. */
   status?: TaskStatus;
+  /** When true, returns a compact summary without per-task detail lines. */
   compact?: boolean;
+  /** Maximum number of tasks to include in the detailed listing. */
   limit?: number;
 }
 
+/**
+ * Result of a status report query, including totals, per-status breakdown,
+ * and an array of task summaries.
+ */
 export interface AOFStatusReportResult extends ToolResponseEnvelope {
+  /** Total number of tasks matching the query filters. */
   total: number;
+  /** Count of tasks in each lifecycle status. */
   byStatus: Record<TaskStatus, number>;
+  /** Summary array of matching tasks with ID, title, status, and assigned agent. */
   tasks: Array<{ id: string; title: string; status: TaskStatus; agent?: string }>;
 }
 
+/**
+ * Generate a read-only status report of tasks in the store.
+ *
+ * Lists tasks filtered by optional agent and status criteria, computes
+ * per-status counts, logs a knowledge.shared event, and returns either
+ * a compact or detailed response envelope.
+ *
+ * @param ctx - Tool context providing store and logger access
+ * @param input - Optional filters (agent, status, compact mode, limit)
+ * @returns Status report with total count, per-status breakdown, and task summaries
+ */
 export async function aofStatusReport(
   ctx: ToolContext,
   input: AOFStatusReportInput = {},

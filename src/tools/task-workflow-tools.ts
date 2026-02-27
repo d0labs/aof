@@ -98,13 +98,25 @@ async function validateGateCompletion(
 
 // ===== TYPES =====
 
+/**
+ * Input for completing a task, supporting both legacy and gate-workflow paths.
+ *
+ * For gate-workflow tasks, `outcome` is required and determines the gate
+ * transition (complete, needs_review, blocked). For non-gate tasks, only
+ * `taskId` and optionally `summary` are needed.
+ */
 export interface AOFTaskCompleteInput {
+  /** Full or prefix task ID to complete. */
   taskId: string;
+  /** Identity of the completing agent or user; defaults to "unknown". */
   actor?: string;
+  /** Completion summary appended to the task body. */
   summary?: string;
-  // Gate workflow fields (optional — only used when task is in a workflow)
+  /** Gate workflow outcome; required for tasks in a gate workflow. */
   outcome?: import("../schemas/gate.js").GateOutcome;
+  /** List of blockers; required when outcome is "blocked" or "needs_review". */
   blockers?: string[];
+  /** Rejection notes explaining why review was not passed. */
   rejectionNotes?: string;
   /**
    * Declared role of the calling agent (e.g., "swe-architect", "swe-qa").
@@ -121,59 +133,126 @@ export interface AOFTaskCompleteInput {
   callerRole?: string;
 }
 
+/**
+ * Result of a task completion, including the final lifecycle status.
+ */
 export interface AOFTaskCompleteResult extends ToolResponseEnvelope {
+  /** The resolved task ID. */
   taskId: string;
+  /** The task's status after completion (typically "done" or a gate-dependent state). */
   status: TaskStatus;
 }
 
+/**
+ * Input for adding a dependency (blocker) to a task.
+ */
 export interface AOFTaskDepAddInput {
+  /** Full or prefix ID of the task that will be blocked. */
   taskId: string;
+  /** Full or prefix ID of the blocking task (prerequisite). */
   blockerId: string;
+  /** Identity of the agent or user adding the dependency; defaults to "unknown". */
   actor?: string;
 }
 
+/**
+ * Result of adding a dependency, including the updated dependency list.
+ */
 export interface AOFTaskDepAddResult extends ToolResponseEnvelope {
+  /** The resolved dependent task ID. */
   taskId: string;
+  /** The resolved blocker task ID. */
   blockerId: string;
+  /** Full list of task IDs this task now depends on. */
   dependsOn: string[];
 }
 
+/**
+ * Input for removing a dependency from a task.
+ */
 export interface AOFTaskDepRemoveInput {
+  /** Full or prefix ID of the task to remove the dependency from. */
   taskId: string;
+  /** Full or prefix ID of the blocking task to remove. */
   blockerId: string;
+  /** Identity of the agent or user removing the dependency; defaults to "unknown". */
   actor?: string;
 }
 
+/**
+ * Result of removing a dependency, including the updated dependency list.
+ */
 export interface AOFTaskDepRemoveResult extends ToolResponseEnvelope {
+  /** The resolved dependent task ID. */
   taskId: string;
+  /** The resolved blocker task ID that was removed. */
   blockerId: string;
+  /** Remaining dependency list after removal. */
   dependsOn: string[];
 }
 
+/**
+ * Input for blocking a task with a reason.
+ */
 export interface AOFTaskBlockInput {
+  /** Full or prefix task ID to block. */
   taskId: string;
+  /** Human-readable explanation of what is preventing progress (required). */
   reason: string;
+  /** Identity of the agent or user blocking the task; defaults to "unknown". */
   actor?: string;
 }
 
+/**
+ * Result of blocking a task.
+ */
 export interface AOFTaskBlockResult extends ToolResponseEnvelope {
+  /** The resolved task ID. */
   taskId: string;
+  /** The task's status after blocking (always "blocked"). */
   status: TaskStatus;
+  /** The blocking reason that was recorded. */
   reason: string;
 }
 
+/**
+ * Input for unblocking a previously blocked task.
+ */
 export interface AOFTaskUnblockInput {
+  /** Full or prefix task ID to unblock. */
   taskId: string;
+  /** Identity of the agent or user unblocking; defaults to "unknown". */
   actor?: string;
 }
 
+/**
+ * Result of unblocking a task.
+ */
 export interface AOFTaskUnblockResult extends ToolResponseEnvelope {
+  /** The resolved task ID. */
   taskId: string;
+  /** The task's status after unblocking (typically "ready"). */
   status: TaskStatus;
 }
 
 // ===== FUNCTIONS =====
 
+/**
+ * Complete a task through either the gate-workflow or legacy completion path.
+ *
+ * Gate-workflow tasks require an `outcome` parameter and are routed through
+ * the gate transition handler, which validates the outcome, enforces role
+ * requirements, and advances the gate state machine. Non-gate tasks follow
+ * the legacy path: append an optional summary, then walk through the
+ * in-progress -> review -> done lifecycle automatically.
+ *
+ * Throws if the task is already done (done-state lock) or if gate
+ * validation fails (missing outcome, invalid outcome, missing blockers).
+ *
+ * @param ctx - Tool context providing store and logger access
+ * @param input - Task ID, optional summary, and gate-workflow fields
+ * @returns The completed task's ID and final status
+ */
 export async function aofTaskComplete(
   ctx: ToolContext,
   input: AOFTaskCompleteInput,
@@ -300,6 +379,17 @@ export async function aofTaskComplete(
   };
 }
 
+/**
+ * Add a dependency (blocker) to a task.
+ *
+ * Both the dependent task and the blocker task are resolved by full ID or
+ * prefix. The blocker is added to the dependent task's `dependsOn` array,
+ * preventing it from being dispatched until the blocker completes.
+ *
+ * @param ctx - Tool context providing store and logger access
+ * @param input - Dependent task ID and blocker task ID
+ * @returns The dependent task's updated dependency list
+ */
 export async function aofTaskDepAdd(
   ctx: ToolContext,
   input: AOFTaskDepAddInput,
@@ -331,6 +421,16 @@ export async function aofTaskDepAdd(
   };
 }
 
+/**
+ * Remove a dependency (blocker) from a task.
+ *
+ * Both the dependent task and the blocker task are resolved by full ID or
+ * prefix. The blocker is removed from the dependent task's `dependsOn` array.
+ *
+ * @param ctx - Tool context providing store and logger access
+ * @param input - Dependent task ID and blocker task ID to remove
+ * @returns The dependent task's updated dependency list after removal
+ */
 export async function aofTaskDepRemove(
   ctx: ToolContext,
   input: AOFTaskDepRemoveInput,
@@ -362,6 +462,17 @@ export async function aofTaskDepRemove(
   };
 }
 
+/**
+ * Block a task, transitioning it to "blocked" status with a required reason.
+ *
+ * The reason must be a non-empty string explaining what prevents progress.
+ * A task.blocked event is logged. Blocked tasks are excluded from dispatch
+ * until explicitly unblocked.
+ *
+ * @param ctx - Tool context providing store and logger access
+ * @param input - Task ID and blocking reason (required)
+ * @returns The blocked task's ID, status, and recorded reason
+ */
 export async function aofTaskBlock(
   ctx: ToolContext,
   input: AOFTaskBlockInput,
@@ -394,6 +505,17 @@ export async function aofTaskBlock(
   };
 }
 
+/**
+ * Unblock a previously blocked task, moving it back to "ready" status.
+ *
+ * Delegates to store.unblock() which transitions the task from "blocked"
+ * to "ready" and logs a task.unblocked event. The task becomes eligible
+ * for dispatch again.
+ *
+ * @param ctx - Tool context providing store and logger access
+ * @param input - Task ID to unblock
+ * @returns The unblocked task's ID and new status
+ */
 export async function aofTaskUnblock(
   ctx: ToolContext,
   input: AOFTaskUnblockInput,
