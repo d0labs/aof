@@ -202,6 +202,4 @@ The current tooling only supports migration to `_inbox`. For multi-project split
 
 ## See Also
 
-- [Projects v0 Specification](./projects-v0.md)
-- [Task Schema](./schemas/task.md)
-- [Project Manifest Schema](./schemas/project.md)
+- [Task Format](./task-format.md) -- Task file structure and frontmatter schema

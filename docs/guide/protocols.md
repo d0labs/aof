@@ -1113,7 +1113,7 @@ Agents should validate the `version` field and reject unsupported versions.
 
 ## Related Documentation
 
-- [PROTOCOLS-DESIGN.md](./PROTOCOLS-DESIGN.md) — Design document and implementation plan
+- [Protocols Design](../dev/protocols-design.md) — Design document and implementation plan
 - Task Store API — Task lifecycle and status transitions
 - Event Logger — Event logging and audit trail
 - Delegation Module — Task delegation and handoff artifacts

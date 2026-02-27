@@ -158,5 +158,5 @@ npx vitest run src/memory/__tests__/pipeline-integration.test.ts
 
 ## Related docs
 
-- [Memory Integration Architecture](./MEMORY-INTEGRATION-ARCHITECTURE.md) — design rationale and decisions
-- [Memory Adapter Spec](./MEMORY-ADAPTER-SPEC.md) — (superseded) original adapter design
+- [Memory Module Plan](../dev/memory-module-plan.md) -- Architecture decisions and implementation plan
+- [Tiered Memory Pipeline](../dev/memory-tier-pipeline.md) -- Hot/warm/cold tier curation pipeline

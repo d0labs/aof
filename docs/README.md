@@ -1,110 +1,68 @@
 # AOF Documentation
 
-**Agent Orchestration Framework (AOF)** — Multi-agent task orchestration with workflow gates, org charts, and deterministic routing.
+**Agent Orchestration Framework (AOF)** -- Multi-agent task orchestration with workflow gates, org charts, and deterministic routing. AOF ensures tasks never get dropped: they survive restarts, API failures, and agent crashes, always resuming and completing end-to-end.
+
+This index is organized by audience: **User Guide** for operators and integrators, **Developer Guide** for contributors and architects.
 
 ---
 
-## Contents
+## User Guide
 
-- [Getting Started](#getting-started)
-- [Core Guides](#core-guides)
-  - [Workflow Gates](#workflow-gates)
-  - [Task Management](#task-management)
-  - [Memory & Context](#memory--context)
-  - [Protocols](#protocols)
-  - [Notifications & SLA](#notifications--sla)
-- [Operations](#operations)
-- [Architecture & Design](#architecture--design)
-- [Contributing](#contributing)
-- [Quick Reference](#quick-reference)
+End-user documentation for deploying, configuring, and operating AOF.
 
----
-
-## Getting Started
-
-- **[Deployment Guide](DEPLOYMENT.md)** — Set up AOF as an OpenClaw plugin or standalone daemon
-- **[Migration Guide](migration-guide.md)** — Upgrade from previous versions
-
-For a 5-minute introduction, see the [Quick Start in the root README](../README.md#quick-start).
+- [Deployment Guide](guide/deployment.md) -- Set up AOF as an OpenClaw plugin or standalone daemon
+- [Workflow Gates User Guide](guide/workflow-gates.md) -- Define and use multi-stage workflow gates with review loops
+- [Task Format](guide/task-format.md) -- Task file structure and frontmatter schema
+- [Protocols User Guide](guide/protocols.md) -- Inter-agent protocols: handoff, resume, status update, completion
+- [Memory Module](guide/memory.md) -- HNSW vector search, embeddings, curation, and memory tools
+- [SLA Guide](guide/sla.md) -- SLA configuration, alerting, and tuning
+- [Notification Policy](guide/notifications.md) -- Channel routing, deduplication, and storm batching
+- [Event Logs](guide/event-logs.md) -- Date-rotated JSONL event stream and audit trail
+- [Recovery Runbook](guide/recovery.md) -- Troubleshooting and incident response procedures
+- [CLI Recovery Reference](guide/cli-recovery.md) -- Quick reference for recovery CLI commands
+- [Migration Guide](guide/migration.md) -- Upgrade from legacy layout to Projects v0
+- [Known Issues](guide/known-issues.md) -- Current limitations and workarounds
 
 ---
 
-## Core Guides
+## Developer Guide
 
-### Workflow Gates
+Contributor documentation, architecture decisions, and design specifications.
 
-Multi-stage process enforcement with review gates, rejection loops, and conditional progression.
+### Contributing
 
-- **[Workflow Gates User Guide](WORKFLOW-GATES.md)** ⭐ — Complete guide to defining and using workflow gates
-- **[Workflow Gates Design](design/WORKFLOW-GATES-DESIGN.md)** — Technical architecture and design decisions
+- [Dev Workflow](dev/dev-workflow.md) -- Fast-feedback development loop for AOF contributors
+- [Dev Tooling Guide](dev/dev-tooling.md) -- Release automation, commit conventions, and git hooks
+- [Engineering Standards](dev/engineering-standards.md) -- Code quality and module structure rules
+- [Refactoring Protocol](dev/refactoring-protocol.md) -- Mandatory protocol for safe incremental refactoring
+- [Agent Instructions](dev/agents.md) -- Task workflow for agents contributing to AOF
+- [Definition of Done](dev/definition-of-done.md) -- What "complete" means for AOF tasks
+- [Release Checklist](dev/release-checklist.md) -- Step-by-step process for cutting a release
+- [Roadmap](dev/roadmap.md) -- Project roadmap and milestone tracking
 
-**Example workflows:**
+### Architecture & Design
 
-| File | Description |
-|------|-------------|
-| [simple-review.yaml](examples/simple-review.yaml) | Minimal 2-gate workflow for small teams |
-| [swe-sdlc.yaml](examples/swe-sdlc.yaml) | Full 9-gate SWE workflow with conditionals |
-| [sales-pipeline.yaml](examples/sales-pipeline.yaml) | Non-SWE example (demonstrates domain neutrality) |
-
-### Task Management
-
-- **[Task Format](task-format.md)** — Task file structure and frontmatter schema
-- **[Definition of Done](DEFINITION-OF-DONE.md)** — What "complete" means for AOF tasks
-- **[SLA Guide](SLA-GUIDE.md)** — SLA configuration, alerting, and tuning
-
-### Memory & Context
-
-- **[Memory Module](MEMORY-MODULE.md)** — HNSW vector search, embeddings, curation, and memory tools
-- **[Memory Module Architecture Plan](architecture/MEMORY-MODULE-PLAN.md)** — Design decisions and implementation plan
-- **[Tiered Memory Pipeline](memory-tier-pipeline.md)** — Hot/warm/cold tier curation pipeline
-- **[Event Logs](event-logs.md)** — Date-rotated JSONL event stream and audit trail
-
-### Protocols
-
-- **[Protocols User Guide](PROTOCOLS-USER-GUIDE.md)** — How to use AOF inter-agent protocols (handoff, resume, status update, completion)
-- **[Protocols Design](PROTOCOLS-DESIGN.md)** — Protocol envelope format and router design
-- **[Protocols BDD Specs](PROTOCOLS-BDD-SPECS.md)** — Behavior-driven specifications
-
-### Notifications & SLA
-
-- **[Notification Policy](notification-policy.md)** — Channel routing, deduplication, storm batching
-- **[SLA Guide](SLA-GUIDE.md)** — SLA tracking and alerting
-- **[SLA Primitive Design](design/SLA-PRIMITIVE-DESIGN.md)** — SLA enforcement internals
+- [Workflow Gates Design](dev/workflow-gates-design.md) -- Technical architecture and gate evaluation internals
+- [Protocols Design](dev/protocols-design.md) -- Protocol envelope format and router design
+- [Protocols BDD Specs](dev/protocols-bdd-specs.md) -- Behavior-driven protocol specifications
+- [Memory Module Plan](dev/memory-module-plan.md) -- Memory v2 architecture: embeddings, SQLite-vec, tiered memory
+- [Tiered Memory Pipeline](dev/memory-tier-pipeline.md) -- Hot/warm/cold tier curation and retrieval pipeline
+- [SLA Primitive Design](dev/sla-primitive-design.md) -- SLA tracking and enforcement internals
+- [Agentic SDLC Design](dev/agentic-sdlc-design.md) -- Reference multi-agent SDLC workflow built on AOF
+- [Daemon Watchdog Design](dev/daemon-watchdog-design.md) -- Health monitoring and self-healing daemon
+- [Adaptive Concurrency](dev/adaptive-concurrency.md) -- Platform limit detection and concurrency tuning
+- [E2E Test Harness Design](dev/e2e-test-harness.md) -- End-to-end test harness architecture
+- [Security Remediation Design](dev/security-remediation.md) -- Protocol security hardening
 
 ---
 
-## Operations
+## Examples
 
-- **[Deployment Guide](DEPLOYMENT.md)** — Production deployment and configuration (plugin mode, daemon mode, Murmur)
-- **[Recovery Runbook](RECOVERY-RUNBOOK.md)** — Troubleshooting and incident response
-- **[CLI Recovery Reference](CLI-RECOVERY-REFERENCE.md)** — Quick reference for recovery CLI commands
-- **[Known Issues](KNOWN-ISSUES.md)** — Current limitations and workarounds
-- **[Release Checklist](RELEASE-CHECKLIST.md)** — Step-by-step process for cutting a public release
+Example workflow definitions demonstrating AOF capabilities.
 
----
-
-## Architecture & Design
-
-| Document | Description |
-|----------|-------------|
-| [Agentic SDLC Design](design/AGENTIC-SDLC-DESIGN.md) | Reference multi-agent SDLC workflow built on AOF |
-| [Daemon Watchdog Design](design/DAEMON-WATCHDOG-DESIGN.md) | Health monitoring and self-healing daemon |
-| [SLA Primitive Design](design/SLA-PRIMITIVE-DESIGN.md) | SLA tracking and enforcement internals |
-| [Adaptive Concurrency](design/adaptive-concurrency.md) | Platform limit detection and concurrency tuning |
-| [E2E Test Harness Design](E2E-TEST-HARNESS-DESIGN.md) | End-to-end test harness architecture |
-| [Security Remediation Design](SECURITY-REMEDIATION-DESIGN.md) | Protocol security hardening |
-| [Memory Module Plan](architecture/MEMORY-MODULE-PLAN.md) | Memory v2 architecture (embeddings, SQLite-vec, tiered memory) |
-| [Tiered Memory Pipeline](memory-tier-pipeline.md) | Tier-aware curation and retrieval pipeline |
-
----
-
-## Contributing
-
-- **[Dev Workflow](contributing/DEV-WORKFLOW.md)** — Fast-feedback loop for AOF contributors
-- **[Dev Tooling Guide](DEV-TOOLING.md)** — Release automation, commit conventions, git hooks
-- **[Engineering Standards](contributing/ENGINEERING-STANDARDS.md)** — Code quality and module structure rules
-- **[Refactoring Protocol](contributing/REFACTORING-PROTOCOL.md)** — Mandatory protocol for safe incremental refactoring
-- **[Agent Instructions](contributing/AGENTS.md)** — Task workflow for agents contributing to AOF
+- [simple-review.yaml](examples/simple-review.yaml) -- Minimal 2-gate workflow for small teams
+- [swe-sdlc.yaml](examples/swe-sdlc.yaml) -- Full 9-gate SWE workflow with conditionals
+- [sales-pipeline.yaml](examples/sales-pipeline.yaml) -- Non-SWE example demonstrating domain neutrality
 
 ---
 
@@ -112,15 +70,11 @@ Multi-stage process enforcement with review gates, rejection loops, and conditio
 
 | Task | Document |
 |------|----------|
-| Set up AOF | [Deployment Guide](DEPLOYMENT.md) |
-| Create a workflow | [Workflow Gates User Guide](WORKFLOW-GATES.md) |
-| Understand task files | [Task Format](task-format.md) |
-| Debug a stuck task | [Recovery Runbook](RECOVERY-RUNBOOK.md) |
-| Send agent protocols | [Protocols User Guide](PROTOCOLS-USER-GUIDE.md) |
-| Configure memory | [Memory Module](MEMORY-MODULE.md) |
-| Cut a release | [Release Checklist](RELEASE-CHECKLIST.md) |
-| Start contributing | [Dev Workflow](contributing/DEV-WORKFLOW.md) |
-
----
-
-**Last Updated:** 2026-02-21
+| Set up AOF | [Deployment Guide](guide/deployment.md) |
+| Create a workflow | [Workflow Gates User Guide](guide/workflow-gates.md) |
+| Understand task files | [Task Format](guide/task-format.md) |
+| Debug a stuck task | [Recovery Runbook](guide/recovery.md) |
+| Send agent protocols | [Protocols User Guide](guide/protocols.md) |
+| Configure memory | [Memory Module](guide/memory.md) |
+| Cut a release | [Release Checklist](dev/release-checklist.md) |
+| Start contributing | [Dev Workflow](dev/dev-workflow.md) |

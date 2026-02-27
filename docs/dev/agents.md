@@ -115,4 +115,4 @@ Implement token-bucket rate limiting on all public API routes.
 - [ ] No regression in existing API tests
 ```
 
-See [Task Format](../task-format.md) for the full frontmatter schema.
+See [Task Format](../guide/task-format.md) for the full frontmatter schema.

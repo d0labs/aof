@@ -704,17 +704,16 @@ aof validate workflow --workflow swe-sdlc --org org.yaml
 
 See the `examples/` directory for complete workflow samples:
 
-- **[simple-review.yaml](examples/simple-review.yaml)** — Minimal 2-gate workflow for small teams
-- **[swe-sdlc.yaml](examples/swe-sdlc.yaml)** — Full 9-gate SWE workflow with conditionals
-- **[sales-pipeline.yaml](examples/sales-pipeline.yaml)** — Non-SWE example demonstrating domain neutrality
+- **[simple-review.yaml](../examples/simple-review.yaml)** — Minimal 2-gate workflow for small teams
+- **[swe-sdlc.yaml](../examples/swe-sdlc.yaml)** — Full 9-gate SWE workflow with conditionals
+- **[sales-pipeline.yaml](../examples/sales-pipeline.yaml)** — Non-SWE example demonstrating domain neutrality
 
 ---
 
 ## Further Reading
 
-- **[Design Document](design/WORKFLOW-GATES-DESIGN.md)** — Complete technical design and architecture
-- **[API Reference](API.md)** — Programmatic workflow API
-- **[Task Format](task-format.md)** — Task file structure and frontmatter schema
+- **[Design Document](../dev/workflow-gates-design.md)** -- Complete technical design and architecture
+- **[Task Format](./task-format.md)** -- Task file structure and frontmatter schema
 
 ---
 
