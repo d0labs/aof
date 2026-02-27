@@ -1,4 +1,7 @@
-# Security Remediation Design — AOF Protocols Primitive
+---
+title: "Security Remediation Design — AOF Protocols Primitive"
+description: "Protocol security hardening."
+---
 
 **Date:** 2026-02-10  
 **Scope:** Protocol router + protocol schemas + related tests  

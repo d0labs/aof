@@ -1,11 +1,7 @@
 ---
-title: Org Charts
-description: Declarative YAML definitions for agents, teams, roles, and routing in AOF.
-sidebar:
-  order: 1
+title: "Org Charts"
+description: "Declarative YAML definitions for agents, teams, roles, and routing in AOF."
 ---
-
-import { Aside } from '@astrojs/starlight/components';
 
 The **org chart** (`org/org-chart.yaml`) is the foundational declaration of your agent topology. It defines who exists, what they can do, how they're organized, and what memory they can access. The scheduler and gate evaluator use the org chart as the single source of truth for routing decisions.
 
@@ -169,9 +165,7 @@ routing:
     weight: 50
 ```
 
-<Aside type="note">
-Explicit `routing.agent` in a task frontmatter always wins over routing rules. Rules are a fallback for tasks without explicit routing.
-</Aside>
+> **Note:** Explicit `routing.agent` in a task frontmatter always wins over routing rules. Rules are a fallback for tasks without explicit routing.
 
 ## Memory Pools
 
@@ -251,19 +245,19 @@ The `aof init` wizard performs a shallow import of your OpenClaw agents into a f
 After running `aof init`, hand the following prompt to your main agent (or architect agent) to interactively design your org chart:
 
 > **SDLC Setup Prompt:**
-> 
+>
 > The AOF org chart has been initialized with our OpenClaw agents. Now I need your help configuring it for our SDLC workflow. Here's what I want to achieve:
-> 
+>
 > **Team structure:**
 > Our SWE agents (swe-architect, swe-po, swe-pm, swe-backend, swe-frontend, swe-qa, swe-security, swe-tech-writer, etc.) should form an "engineering" team with proper roles and an SDLC lifecycle.
-> 
+>
 > **What I want configured:**
 > 1. **Roles:** architect (design+orchestrate), po/pm (requirements), backend/frontend/ai (implementation), security (cross-cutting review), qa (validation), tech-writer (documentation).
 > 2. **Gates:** Work must flow through: `backlog → ready → in-progress → review → done`. Gate rules: all implementation tasks require a passing test run before `review`. Security review is required for tasks tagged `security` or `auth`. Tech-writer review is required for tasks tagged `docs` or `api-change`.
 > 3. **Routing rules:** Tasks tagged `backend` → swe-backend; `frontend` → swe-frontend; `security` → swe-security; `docs` → swe-tech-writer; `qa` → swe-qa. Untagged tasks → swe-architect triage.
 > 4. **Protocols:** TDD required — tests must be written before implementation. No PRs without tests. Code review by at least one peer before `done`. Documentation updated with every API change.
 > 5. **Communication:** Architect coordinates; specialists receive task briefs via AOF dispatch; results reported back via `aof task complete`. No direct agent-to-agent side channels for task work (all work goes through AOF queue).
-> 
+>
 > Please read the current org chart at `org/org-chart.yaml`, then propose updates to implement this. Show me the diff and confirm with me before writing. Make the gates and routing rules explicit in the YAML — not implied.
 
 This prompt is intentionally collaborative: the agent proposes and you confirm. This prevents a brittle, hardcoded SDLC configuration that doesn't fit your actual team norms.
@@ -293,7 +287,3 @@ aof org lint
 # Detect drift vs active agents
 aof org drift
 ```
-
-## Full Reference
-
-See [Org Chart YAML Schema Reference](/reference/org-chart-schema) for the complete field reference.

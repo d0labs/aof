@@ -1,4 +1,7 @@
-# Memory Module
+---
+title: "Memory Module"
+description: "HNSW vector search, embeddings, curation, and memory tools."
+---
 
 **Last updated**: 2026-02-19
 **Status**: Vertical slice complete — stores, embeddings, search, curation, tools all implemented and tested.

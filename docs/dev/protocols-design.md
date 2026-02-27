@@ -1,4 +1,7 @@
-# Protocols Primitive Design (P2.3+)
+---
+title: "Protocols Primitive Design (P2.3+)"
+description: "Protocol envelope format and router design."
+---
 
 **Status:** Draft (design-only, no implementation yet)
 **Owner:** SWE Architect

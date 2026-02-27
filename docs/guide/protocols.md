@@ -1,4 +1,7 @@
-# AOF Protocols User Guide
+---
+title: "AOF Protocols User Guide"
+description: "Inter-agent protocols: handoff, resume, status update, completion."
+---
 
 **Version:** AOF/1 (Protocol Version 1)  
 **Audience:** Agent developers building on the AOF task framework  

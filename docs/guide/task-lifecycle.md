@@ -1,13 +1,9 @@
 ---
-title: Task Lifecycle
-description: How tasks move through AOF's state machine — from creation to completion.
-sidebar:
-  order: 2
+title: "Task Lifecycle"
+description: "How tasks move through AOF's state machine — from creation to completion."
 ---
 
-import { Aside } from '@astrojs/starlight/components';
-
-Every AOF task moves through a well-defined state machine. State transitions are atomic filesystem `rename()` operations — no database, no locks beyond the OS.
+How tasks move through AOF's state machine — from creation to completion.
 
 ## State Machine
 
@@ -179,7 +175,7 @@ When Task A transitions to `done`, the dep-cascader:
 3. Transitions newly-unblocked tasks from `blocked` → `ready`
 4. Emits a `dependency.unblocked` event
 
-This is immediate (on-completion hook) plus a scheduler safety net (periodic scan). See [Cascading Dependencies](/concepts/cascading-dependencies) for details.
+This is immediate (on-completion hook) plus a scheduler safety net (periodic scan). See [Cascading Dependencies](cascading-dependencies.md) for details.
 
 ## Leases and Heartbeats
 
@@ -214,6 +210,4 @@ Every state transition emits a structured event to `events/events.jsonl`:
 
 This log is append-only and can be used for audit, replay, and observability.
 
-<Aside type="tip">
-Use `aof board` to visualize task states as a Kanban board, or `aof watch kanban` for a real-time view.
-</Aside>
+> **Tip:** Use `aof board` to visualize task states as a Kanban board, or `aof watch kanban` for a real-time view.

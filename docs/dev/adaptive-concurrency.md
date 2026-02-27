@@ -1,4 +1,7 @@
-# Design: Adaptive Concurrency (Platform Limit Detection)
+---
+title: "Design: Adaptive Concurrency (Platform Limit Detection)"
+description: "Platform limit detection and concurrency tuning."
+---
 
 **Status**: Draft  
 **Date**: 2026-02-16  

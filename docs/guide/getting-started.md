@@ -1,4 +1,7 @@
-# Getting Started with AOF
+---
+title: "Getting Started with AOF"
+description: "Install AOF, configure it, and run your first task."
+---
 
 AOF orchestrates teams of agents the way you would orchestrate teams of people -- with org charts, enforced workflows, shared memory, and collaborative task management. It works for any domain: software engineering, RevOps, operations, sales and marketing, research, or any process that needs governance across multiple agents.
 

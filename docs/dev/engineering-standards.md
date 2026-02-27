@@ -1,4 +1,7 @@
-# Engineering Standards — Implementation Agents
+---
+title: "Engineering Standards — Implementation Agents"
+description: "Code quality and module structure rules."
+---
 
 These standards apply to all agents that write code (backend, frontend, SRE, cybersecurity).
 Read this before every implementation task.

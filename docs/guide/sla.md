@@ -1,4 +1,7 @@
-# AOF SLA Guide
+---
+title: "AOF SLA Guide"
+description: "SLA configuration, alerting thresholds, and tuning guide."
+---
 
 **Audience:** Project leads, PMs, SREs  
 **Scope:** SLA configuration, alerting, and tuning (Phase 1.5)

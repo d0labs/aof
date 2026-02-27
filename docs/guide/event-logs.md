@@ -1,4 +1,7 @@
-# Event Log Access
+---
+title: "Event Log Access"
+description: "Date-rotated JSONL event stream and audit trail."
+---
 
 AOF uses **date-rotated event logs** for audit trail and observability.
 

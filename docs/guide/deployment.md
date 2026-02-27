@@ -1,4 +1,7 @@
-# AOF Deployment Guide
+---
+title: "AOF Deployment Guide"
+description: "Set up AOF as an OpenClaw plugin or standalone daemon."
+---
 
 **Audience:** Operators, SREs, DevOps teams  
 **Scope:** OpenClaw plugin mode, standalone daemon mode, and conflict prevention

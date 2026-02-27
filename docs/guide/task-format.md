@@ -1,4 +1,7 @@
-# Task Card Format
+---
+title: "Task Card Format"
+description: "Task file structure, frontmatter schema, and field reference."
+---
 
 AOF task cards are Markdown files with YAML frontmatter. This document describes the recommended structure for task cards, including the Instructions vs Guidance distinction introduced in CTX-006.
 

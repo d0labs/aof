@@ -1,17 +1,11 @@
 ---
-title: Agent Tools Reference
-description: Complete reference for all AOF tools available to agents — parameters, types, and examples.
-sidebar:
-  order: 1
+title: "Agent Tools Reference"
+description: "Complete reference for all AOF tools available to agents — parameters, types, and examples."
 ---
-
-import { Aside } from '@astrojs/starlight/components';
 
 AOF exposes a set of tools to agents via MCP (Model Context Protocol) or the OpenClaw gateway. These tools are the primary API for agents to interact with the task system.
 
-<Aside type="tip">
-All tools accept an optional `actor` parameter identifying the calling agent. Always supply this — it's used for audit logging, event attribution, and gate role enforcement.
-</Aside>
+> **Tip:** All tools accept an optional `actor` parameter identifying the calling agent. Always supply this — it's used for audit logging, event attribution, and gate role enforcement.
 
 ## aof_dispatch
 
@@ -21,8 +15,8 @@ Create and dispatch a new task to the ready queue.
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `title` | string | ✅ | Short task title (shown in board/mailbox views) |
-| `brief` | string | ✅ | Task description / body (Markdown supported) |
+| `title` | string | yes | Short task title (shown in board/mailbox views) |
+| `brief` | string | yes | Task description / body (Markdown supported) |
 | `agent` | string | — | Target agent ID (bypasses org chart routing) |
 | `team` | string | — | Target team ID |
 | `role` | string | — | Target role from org chart roles mapping |
@@ -79,11 +73,11 @@ Mark a task as complete. For gated tasks, advance or reject the current gate.
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `taskId` | string | ✅ | Task ID or ID prefix |
+| `taskId` | string | yes | Task ID or ID prefix |
 | `summary` | string | — | Completion summary / work log entry |
-| `outcome` | enum | ✅ (gated) | `"complete"` \| `"needs_review"` \| `"blocked"` |
-| `blockers` | string[] | ✅ (when outcome=needs_review or blocked) | Issues preventing progress |
-| `callerRole` | string | Recommended | Declared role for gate enforcement |
+| `outcome` | enum | yes (gated) | `"complete"` \| `"needs_review"` \| `"blocked"` |
+| `blockers` | string[] | yes (when outcome=needs_review or blocked) | Issues preventing progress |
+| `callerRole` | string | recommended | Declared role for gate enforcement |
 | `actor` | string | — | Calling agent ID |
 
 **Outcomes for gated tasks:**
@@ -159,7 +153,7 @@ Update a task's status or body without completing it. Use for status changes, he
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `taskId` | string | ✅ | Task ID or prefix |
+| `taskId` | string | yes | Task ID or prefix |
 | `body` | string | — | New body content (replaces existing) |
 | `status` | enum | — | New status (must be a valid transition) |
 | `reason` | string | — | Reason for status change (logged to events) |
@@ -200,7 +194,7 @@ Edit task metadata: title, description, priority, or routing.
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `taskId` | string | ✅ | Task ID or prefix |
+| `taskId` | string | yes | Task ID or prefix |
 | `title` | string | — | New title |
 | `description` | string | — | New description (Markdown) |
 | `priority` | enum | — | `"low"` \| `"normal"` \| `"high"` \| `"critical"` |
@@ -248,7 +242,7 @@ Cancel a task (moves to `cancelled` — terminal state).
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `taskId` | string | ✅ | Task ID or prefix |
+| `taskId` | string | yes | Task ID or prefix |
 | `reason` | string | — | Cancellation reason (logged) |
 | `actor` | string | — | Calling agent ID |
 
@@ -275,8 +269,8 @@ Add a dependency to a task (task will be blocked until the blocker is done).
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `taskId` | string | ✅ | The dependent task |
-| `blockerId` | string | ✅ | Task that must complete first |
+| `taskId` | string | yes | The dependent task |
+| `blockerId` | string | yes | Task that must complete first |
 | `actor` | string | — | Calling agent ID |
 
 **Returns:**
@@ -299,8 +293,8 @@ Remove a dependency from a task.
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `taskId` | string | ✅ | The dependent task |
-| `blockerId` | string | ✅ | Dependency to remove |
+| `taskId` | string | yes | The dependent task |
+| `blockerId` | string | yes | Dependency to remove |
 | `actor` | string | — | Calling agent ID |
 
 ---
@@ -313,8 +307,8 @@ Block a task on an external dependency not tracked as another task.
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `taskId` | string | ✅ | Task to block |
-| `reason` | string | ✅ | What's blocking progress |
+| `taskId` | string | yes | Task to block |
+| `reason` | string | yes | What's blocking progress |
 | `actor` | string | — | Calling agent ID |
 
 **Example:**
@@ -340,7 +334,7 @@ Mark a blocked task as ready for dispatch.
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `taskId` | string | ✅ | Task to unblock |
+| `taskId` | string | yes | Task to unblock |
 | `actor` | string | — | Calling agent ID |
 
 ---

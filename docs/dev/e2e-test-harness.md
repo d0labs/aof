@@ -1,4 +1,7 @@
-# AOF E2E Test Harness — Design Document
+---
+title: "AOF E2E Test Harness — Design Document"
+description: "End-to-end test harness architecture."
+---
 
 **Status:** APPROVED FOR IMPLEMENTATION  
 **Owner:** swe-architect  

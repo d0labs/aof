@@ -1,4 +1,7 @@
-# SLA Primitive Design
+---
+title: "SLA Primitive Design"
+description: "SLA tracking and enforcement internals."
+---
 
 **Task:** AOF-09x, AOF-ae6  
 **Date:** 2026-02-13  

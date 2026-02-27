@@ -1,11 +1,7 @@
 ---
-title: Writing Custom Workflow Gates
-description: Design workflow gates for your specific process — from simple 2-stage reviews to complex multi-stage SDLC pipelines.
-sidebar:
-  order: 3
+title: "Writing Custom Workflow Gates"
+description: "Design workflow gates for your specific process — from simple reviews to complex multi-stage pipelines."
 ---
-
-import { Aside } from '@astrojs/starlight/components';
 
 Workflow gates are domain-neutral — the same primitive works for software development, sales pipelines, content review, compliance workflows, or any staged process. This guide walks you through designing gates for your specific use case.
 
@@ -346,6 +342,4 @@ workflow:
       timeout: 3h
 ```
 
-<Aside type="tip">
-See the example workflows in `docs/examples/` for more complete templates including the full 9-gate SWE SDLC and the sales pipeline.
-</Aside>
+> **Tip:** See the example workflows in `docs/examples/` for more complete templates including the full 9-gate SWE SDLC and the sales pipeline.

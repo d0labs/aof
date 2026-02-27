@@ -1,4 +1,7 @@
-# Daemon Watchdog Design
+---
+title: "Daemon Watchdog Design"
+description: "Health monitoring and self-healing daemon."
+---
 
 **Task:** AOF-kux  
 **Date:** 2026-02-13  

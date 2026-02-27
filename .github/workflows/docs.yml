@@ -5,12 +5,14 @@ on:
     branches:
       - main
     paths:
+      - "docs/**"
       - "website/**"
       - ".github/workflows/docs.yml"
   pull_request:
     branches:
       - main
     paths:
+      - "docs/**"
       - "website/**"
   workflow_dispatch:
 

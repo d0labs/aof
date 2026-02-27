@@ -1,4 +1,7 @@
-# Tiered Memory Pipeline — Design Specification
+---
+title: "Tiered Memory Pipeline — Design Specification"
+description: "Hot/warm/cold tier curation and retrieval pipeline."
+---
 
 **Version:** 1.0  
 **Status:** Draft  

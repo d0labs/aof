@@ -1,4 +1,7 @@
-# Configuration Reference
+---
+title: "Configuration Reference"
+description: "Org-chart schema, AOF config options, and OpenClaw plugin wiring."
+---
 
 AOF uses three layers of configuration: the **org chart** (agent topology and routing), the **AOF config** (runtime behavior), and the **OpenClaw plugin wiring** (gateway integration). This document covers all three.
 

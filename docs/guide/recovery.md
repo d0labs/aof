@@ -1,4 +1,7 @@
-# AOF Recovery Runbook
+---
+title: "AOF Recovery Runbook"
+description: "Troubleshooting and incident response procedures."
+---
 
 **Version:** Phase 1.5  
 **Last Updated:** 2026-02-15  

@@ -1,11 +1,7 @@
 ---
-title: Cascading Dependencies
-description: How AOF automatically propagates task completions and blockings to dependent tasks.
-sidebar:
-  order: 7
+title: "Cascading Dependencies"
+description: "How AOF automatically propagates task completions and blockings to dependent tasks."
 ---
-
-import { Aside } from '@astrojs/starlight/components';
 
 AOF's dependency cascade system automatically propagates task state changes to downstream dependents. When a task completes (or blocks), all tasks that were waiting on it are immediately evaluated and potentially unblocked — without any polling or manual intervention.
 
@@ -100,9 +96,7 @@ When `cascadeBlocks: true`:
 - Mark them as `blocked` with reason "upstream task TASK-A is blocked"
 - Prevents work from starting on tasks that will be stuck anyway
 
-<Aside type="note">
-`cascadeBlocks` is opt-in and defaults to `false`. Enable it for strict dependency enforcement in workflows where upstream blocks should halt all downstream work.
-</Aside>
+> **Note:** `cascadeBlocks` is opt-in and defaults to `false`. Enable it for strict dependency enforcement in workflows where upstream blocks should halt all downstream work.
 
 ## Scheduler Safety Net
 

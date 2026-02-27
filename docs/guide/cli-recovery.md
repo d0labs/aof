@@ -1,4 +1,7 @@
-# AOF Recovery CLI Reference
+---
+title: "AOF Recovery CLI Reference"
+description: "Quick reference for recovery CLI commands."
+---
 
 Quick reference for recovery-related CLI commands and flags (Phase 1.5).
 

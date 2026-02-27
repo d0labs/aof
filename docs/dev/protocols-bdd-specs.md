@@ -1,4 +1,7 @@
-# AOF Protocols BDD Specifications
+---
+title: "AOF Protocols BDD Specifications"
+description: "Behavior-driven protocol specifications."
+---
 
 **Version:** 1.0  
 **Status:** Implemented  

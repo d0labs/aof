@@ -1,4 +1,7 @@
-# Definition of Done — SWE Team
+---
+title: "Definition of Done — SWE Team"
+description: "What 'complete' means for AOF tasks."
+---
 
 **Purpose:** Prevent incomplete work from being marked "done" and causing production failures.
 

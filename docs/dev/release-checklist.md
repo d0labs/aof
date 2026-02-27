@@ -1,4 +1,7 @@
-# AOF Release Checklist
+---
+title: "AOF Release Checklist"
+description: "Step-by-step process for cutting a release."
+---
 
 Step-by-step process for cutting a public AOF release to npm.
 

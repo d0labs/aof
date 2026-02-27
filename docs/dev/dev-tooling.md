@@ -1,4 +1,7 @@
-# AOF Dev Tooling Guide
+---
+title: "AOF Dev Tooling Guide"
+description: "Release automation, commit conventions, and git hooks."
+---
 
 A guide to AOF's release automation, commit conventions, and git hooks.  
 Designed as a reusable pattern — see [Extracting as a Template](#extracting-as-a-template) at the bottom.

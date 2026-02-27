@@ -1,4 +1,7 @@
-# AOF Development Workflow
+---
+title: "AOF Development Workflow"
+description: "Fast-feedback development loop for AOF contributors."
+---
 
 A practical guide to the fast-feedback loop used by AOF contributors.
 

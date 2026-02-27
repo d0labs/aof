@@ -1,4 +1,7 @@
-# Agentic SDLC Design — Reference Workflow for AOF
+---
+title: "Agentic SDLC Design — Reference Workflow for AOF"
+description: "Reference multi-agent SDLC workflow built on AOF."
+---
 
 **Version:** 1.0  
 **Author:** Software Architect  

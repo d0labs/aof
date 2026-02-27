@@ -1,4 +1,7 @@
-# Notification Policy (P2.4)
+---
+title: "Notification Policy (P2.4)"
+description: "Channel routing, deduplication, and notification storm batching."
+---
 
 **Status:** Specification complete; Matrix integration deferred to Phase 3.
 

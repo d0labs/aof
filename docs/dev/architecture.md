@@ -1,4 +1,7 @@
-# Architecture Overview
+---
+title: "Architecture Overview"
+description: "System architecture, subsystem descriptions, and key interfaces."
+---
 
 This document gives contributors enough context to navigate the AOF codebase, understand how the major subsystems interact, and identify the right module when making changes.
 

@@ -1,4 +1,7 @@
-# Migration Guide: Legacy → Projects v0
+---
+title: "Migration Guide: Legacy → Projects v0"
+description: "Upgrade from legacy layout to Projects v0."
+---
 
 This guide explains how to migrate a legacy single-project AOF vault to the new Projects v0 layout.
 

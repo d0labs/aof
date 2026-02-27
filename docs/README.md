@@ -25,6 +25,11 @@ End-user documentation for deploying, configuring, and operating AOF.
 - [CLI Recovery Reference](guide/cli-recovery.md) -- Quick reference for recovery CLI commands
 - [Migration Guide](guide/migration.md) -- Upgrade from legacy layout to Projects v0
 - [Known Issues](guide/known-issues.md) -- Current limitations and workarounds
+- [Task Lifecycle](guide/task-lifecycle.md) -- How tasks move through AOF's state machine
+- [Org Charts](guide/org-charts.md) -- Declarative YAML definitions for agents, teams, roles, and routing
+- [Cascading Dependencies](guide/cascading-dependencies.md) -- Automatic propagation of task completions to dependents
+- [Custom Gates](guide/custom-gates.md) -- Design workflow gates for your specific process
+- [Agent Tools](guide/agent-tools.md) -- Complete reference for all AOF tools available to agents
 
 ---
 
@@ -82,5 +87,9 @@ Example workflow definitions demonstrating AOF capabilities.
 | Debug a stuck task | [Recovery Runbook](guide/recovery.md) |
 | Send agent protocols | [Protocols User Guide](guide/protocols.md) |
 | Configure memory | [Memory Module](guide/memory.md) |
+| Understand task states | [Task Lifecycle](guide/task-lifecycle.md) |
+| Define your org chart | [Org Charts](guide/org-charts.md) |
+| Design custom gates | [Custom Gates](guide/custom-gates.md) |
+| Agent tool reference | [Agent Tools](guide/agent-tools.md) |
 | Cut a release | [Release Checklist](dev/release-checklist.md) |
 | Start contributing | [Dev Workflow](dev/dev-workflow.md) |

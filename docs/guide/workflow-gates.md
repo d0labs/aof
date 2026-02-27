@@ -1,4 +1,7 @@
-# Workflow Gates: User Guide
+---
+title: "Workflow Gates: User Guide"
+description: "Define and use multi-stage workflow gates with review loops."
+---
 
 **Version:** 1.0  
 **Last Updated:** 2026-02-16

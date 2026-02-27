@@ -140,7 +140,7 @@ aof init --yes
 
 The wizard runs four steps: plugin registration, org chart sync, memory configuration (optional), and companion skill installation. Each step is idempotent, so it's safe to re-run.
 
-See the [CLI reference](/reference/cli#init) for a full walkthrough of what each step does.
+See the [CLI reference](/guide/cli-reference#init) for a full walkthrough of what each step does.
 
 Task directories (`tasks/backlog/`, `tasks/ready/`, etc.) are created automatically by AOF as tasks are written — you don't need to create them manually.
 
@@ -178,7 +178,7 @@ AOF includes an optional memory module (disabled by default). To enable it:
 ```
 
 <Aside type="note">
-If you're using `memory-core` (OpenClaw's built-in memory plugin), AOF's memory module is disabled by default to avoid conflicts. You can enable both — they use separate storage — but you'll need to configure the embedding provider for AOF's module independently. See [Memory Module Setup](/guides/memory-setup) for details.
+If you're using `memory-core` (OpenClaw's built-in memory plugin), AOF's memory module is disabled by default to avoid conflicts. You can enable both — they use separate storage — but you'll need to configure the embedding provider for AOF's module independently. See [Memory Module Setup](/guide/memory) for details.
 </Aside>
 
 ## Verifying Your Installation
@@ -201,9 +201,9 @@ aof scheduler run
 
 The `aof init` wizard imports your agents as a flat list. To organize them into an actual Software Development Life Cycle (SDLC) with roles, routing rules, and workflow gates, use the **SDLC Setup Prompt**.
 
-Read the guide on [Generating an SDLC Org Chart](/concepts/org-charts#generating-an-sdlc-org-chart) for the interactive prompt to give your main agent.
+Read the guide on [Generating an SDLC Org Chart](/guide/org-charts#generating-an-sdlc-org-chart) for the interactive prompt to give your main agent.
 
 ## Next Steps
 
 - [Quick Start Tutorial](/getting-started/quick-start) — Create your first org chart and dispatch a task
-- [Plugin Configuration Reference](/reference/plugin-config) — All config keys and defaults
+- [Configuration Reference](/guide/configuration) — All config keys and defaults

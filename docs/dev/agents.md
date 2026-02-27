@@ -1,4 +1,7 @@
-# Agent Instructions for AOF Contributors
+---
+title: "Agent Instructions for AOF Contributors"
+description: "Task workflow for agents contributing to AOF."
+---
 
 This document describes the task workflow and session discipline expected of agents working on the AOF codebase.
 

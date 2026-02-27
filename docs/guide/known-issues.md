@@ -1,4 +1,7 @@
-# AOF Known Issues & Workarounds
+---
+title: "AOF Known Issues & Workarounds"
+description: "Current limitations and workarounds."
+---
 
 > Tracks known issues, workarounds, and resolution status. Update when an issue is resolved.
 > See also: `DEPLOYMENT.md` for deployment-specific instructions.

@@ -1,4 +1,7 @@
-# Refactoring Protocol — Incremental Extraction
+---
+title: "Refactoring Protocol — Incremental Extraction"
+description: "Mandatory protocol for safe incremental refactoring."
+---
 
 This protocol is MANDATORY for all structural refactoring tasks (file splits, module extractions, symbol moves).
 

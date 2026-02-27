@@ -1,9 +1,6 @@
-# AOF Memory Module — Architecture & Implementation Plan
-
-**Date**: 2026-02-17  
-**Architect**: AOF core team
-**Status**: Design approved, tasks created
-
+---
+title: "AOF Memory Module — Architecture & Implementation Plan"
+description: "Memory v2 architecture: embeddings, SQLite-vec, tiered memory."
 ---
 
 ## Executive Summary

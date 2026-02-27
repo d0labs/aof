@@ -1,4 +1,7 @@
-# AOF Roadmap
+---
+title: "AOF Roadmap"
+description: "Project roadmap and milestone tracking."
+---
 
 ## Memory: True Medallion Architecture
 

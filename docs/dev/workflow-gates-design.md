@@ -1,4 +1,7 @@
-# Workflow Gates: High-Level Design
+---
+title: "Workflow Gates: High-Level Design"
+description: "Technical architecture and gate evaluation internals."
+---
 
 **Version:** 1.0  
 **Author:** Architect  
