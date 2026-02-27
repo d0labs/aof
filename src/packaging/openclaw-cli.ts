@@ -181,8 +181,8 @@ export async function detectMemoryPlugin(): Promise<MemoryPluginInfo> {
  * Disables the current memory slot holder and sets slots.memory to "aof".
  */
 export async function configureAofAsMemoryPlugin(currentPlugin?: string): Promise<void> {
-  // Disable current memory plugin if known
-  if (currentPlugin) {
+  // Disable current memory plugin if known (but never disable ourselves)
+  if (currentPlugin && currentPlugin !== "aof") {
     await openclawConfigSet(`plugins.entries.${currentPlugin}.enabled`, false);
   }
   // Set memory slot to aof

@@ -247,7 +247,9 @@ determine_version() {
 download_tarball() {
   printf "\nDownloading AOF v%s...\n" "$VERSION"
 
-  TARBALL=$(mktemp "${TMPDIR:-/tmp}/aof-install-XXXXXX.tar.gz")
+  TARBALL_TMP=$(mktemp "${TMPDIR:-/tmp}/aof-install.XXXXXX")
+  TARBALL="${TARBALL_TMP}.tar.gz"
+  mv "$TARBALL_TMP" "$TARBALL"
   add_cleanup "$TARBALL"
 
   DOWNLOAD_URL="https://github.com/d0labs/aof/releases/download/v${VERSION}/aof-v${VERSION}.tar.gz"

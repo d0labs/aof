@@ -1,4 +1,6 @@
-import { HierarchicalNSW } from "hnswlib-node";
+import hnswlib from "hnswlib-node";
+import type { HierarchicalNSW as HierarchicalNSWType } from "hnswlib-node";
+const { HierarchicalNSW } = hnswlib;
 
 /** A single KNN search result from the HNSW index. */
 export type HnswSearchResult = {
@@ -28,7 +30,7 @@ const DEFAULT_SPACE = "cosine" as const;
  * Labels in the HNSW index map 1-to-1 to sqlite chunk IDs.
  */
 export class HnswIndex {
-  private index: HierarchicalNSW;
+  private index: HierarchicalNSWType;
   private readonly _dimensions: number;
   private readonly onResize: ResizeEventLogger | null;
 
@@ -133,7 +135,7 @@ export class HnswIndex {
 
   // ─── Private helpers ─────────────────────────────────────────────────────
 
-  private createIndex(capacity: number): HierarchicalNSW {
+  private createIndex(capacity: number): HierarchicalNSWType {
     const idx = new HierarchicalNSW(DEFAULT_SPACE, this._dimensions);
     idx.initIndex({
       maxElements: capacity,
